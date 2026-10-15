@@ -14,11 +14,11 @@
     <h1>Comparateur de scénarios<br>de prêt immobilier en VEFA</h1>
     <div class="bar"></div>
     <p class="sub">Créez jusqu'à 4 scénarios, ajustez les paramètres et comparez la mensualité réelle, période par période, à ce que votre budget peut absorber.</p>
-    <div class="nav-links">
+    {% if lien_limites %}<div class="nav-links">
       <a href="{{ url_for('eligibilite') }}" class="lien">Test d'éligibilité aux aides</a>
       <a href="{{ url_for('analyse') }}" class="lien">Analyse de bien</a>
-      {% if lien_limites %}<a href="{{ url_for('limites') }}" class="lien">Limites du modèle</a>{% endif %}
-    </div>
+      <a href="{{ url_for('limites') }}" class="lien">Limites du modèle</a>
+    </div>{% endif %}
   </header>
   <div class="card budget">
     <div class="f"><label for="epargne">Épargne mensuelle (€)</label><input type="number" id="epargne" min="0" step="10"></div>

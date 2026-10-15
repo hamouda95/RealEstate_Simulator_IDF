@@ -28,7 +28,7 @@
       </div>
 
       <div class="f">
-        <label for="rayon">Rayon de recherche  mètres)</label>
+        <label for="rayon">Rayon de recherche (mètres)</label>
         <input type="number" id="rayon" min="100" max="2000" step="100" value="500">
       </div>
 
@@ -61,6 +61,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 let map = null;
 let markers = [];
 
@@ -87,6 +88,8 @@ async function analyserBien() {
   $('loading').style.display = 'block';
   $('error').style.display = 'none';
   $('poi-results').style.display = 'none';
+  $('zone-info').style.display = 'none';
+  document.getElementById('rating')?.remove();
   clearMarkers();
 
   try {
@@ -114,7 +117,7 @@ async function analyserBien() {
         html: '<div style="background:#e74c3c;width:20px;height:20px;border-radius:50%;border:3px solid white;"></div>',
         iconSize: [20, 20],
       })
-    }).addTo(map).bindPopup(geoData.display_name);
+    }).addTo(map).bindPopup(esc(geoData.display_name));
     markers.push(mainMarker);
 
     // Cercle de rayon
@@ -158,6 +161,8 @@ async function analyserBien() {
       });
       const ratingData = await ratingResponse.json();
       afficherRating(ratingData);
+    } else {
+      showError(poiData.error || "Recherche des commodités impossible");
     }
 
   } catch (error) {
@@ -194,7 +199,7 @@ function afficherPOI(poi, centerLat, centerLon) {
       <ul>`;
     
     items.forEach(item => {
-      html += `<li>${item.nom}</li>`;
+      html += `<li>${esc(item.nom)}</li>`;
       
       // Marqueur sur la carte
       const marker = L.circleMarker([item.lat, item.lon], {
@@ -204,7 +209,7 @@ function afficherPOI(poi, centerLat, centerLon) {
         weight: 2,
         opacity: 1,
         fillOpacity: 0.8,
-      }).addTo(map).bindPopup(`${item.nom} (${type})`);
+      }).addTo(map).bindPopup(`${esc(item.nom)} (${type})`);
       markers.push(marker);
     });
     
@@ -216,6 +221,7 @@ function afficherPOI(poi, centerLat, centerLon) {
 
 function afficherRating(rating) {
   const ratingDiv = document.createElement('div');
+  ratingDiv.id = 'rating';
   ratingDiv.className = 'card ok';
   ratingDiv.innerHTML = `
     <h3>Rating du quartier</h3>
@@ -226,13 +232,7 @@ function afficherRating(rating) {
   `;
   
   // Insérer avant la liste des POI
-  const poiResults = $('poi-results');
-  const firstCard = poiResults.querySelector('.card');
-  if (firstCard) {
-    poiResults.insertBefore(ratingDiv, firstCard);
-  } else {
-    poiResults.appendChild(ratingDiv);
-  }
+  $('poi-results').insertBefore(ratingDiv, $('poi-liste'));
 }
 
 function showError(message) {

@@ -3,6 +3,8 @@
 Lancer :  pip install -r requirements.txt && python app.py
 Ouvrir :  http://127.0.0.1:5050
 """
+import math
+
 from flask import Flask, jsonify, render_template, request
 import requests
 
@@ -45,14 +47,16 @@ PLAFONDS_AL = {
     "C": {1: 31589, 2: 42186, 3: 50731, 4: 61243, 5: 72044, 6: 81192, "sup": 9063},
 }
 
-# Montants max PTZ selon type d'opération
-MONTANT_MAX_PTZ = {
-    "neuf_collectif": 360000,  # Zone A/A bis/B1
-    "neuf_individuel": 360000,  # Tout territoire (depuis 2025)
-    "ancien_travaux": 360000,   # Zone B2/C
-}
-
 # ---------------------------------------------------------------- fonctions d'éligibilité aux aides
+def nombre(v, defaut):
+    """Convertit une saisie en nombre fini, sinon renvoie la valeur par défaut."""
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return defaut
+    return x if math.isfinite(x) else defaut
+
+
 def determiner_tranche_ptz(revenu, plafond_zone):
     """Détermine la tranche PTZ selon le revenu par rapport au plafond de zone."""
     ratio = revenu / plafond_zone if plafond_zone > 0 else 1.0
@@ -127,12 +131,14 @@ def calculer_montant_al_max(cout_operation):
 
 def eligibilite_aides(params):
     """Calcule l'éligibilité à toutes les aides selon les paramètres."""
-    revenu = params.get("revenu_fiscal", 0)
-    nb_personnes = params.get("nb_personnes", 1)
+    revenu = nombre(params.get("revenu_fiscal"), 0)
+    nb_personnes = max(1, int(nombre(params.get("nb_personnes"), 1)))
     zone = params.get("zone", "B1")
+    if zone not in PLAFONDS_PTZ:
+        zone = "B1"
     type_logement = params.get("type_logement", "neuf")  # neuf, ancien, vefa
-    salarie = params.get("salarie", False)
-    prix = params.get("prix", 0)
+    salarie = bool(params.get("salarie", False))
+    prix = nombre(params.get("prix"), 0)
 
     aides = {}
 
@@ -193,15 +199,16 @@ def eligibilite_aides(params):
 # ---------------------------------------------------------------- simulation location vs achat
 def simulation_location(params):
     """Simule le scénario location sur une durée donnée."""
-    loyer_mensuel = params.get("loyer", 1000)
-    augmentation_annuelle = params.get("augmentation_loyer", 0.015)  # 1.5% par défaut
-    epargne_mensuelle = params.get("epargne", 500)
-    rendement_epargne = params.get("rendement_epargne", 0.03)  # 3% livret A
-    duree_annees = params.get("duree_analyse", 20)
-    charges_locatives = params.get("charges_locatives", 50)
+    loyer_mensuel = nombre(params.get("loyer"), 1000)
+    augmentation_annuelle = nombre(params.get("augmentation_loyer"), 0.015)  # 1.5% par défaut
+    epargne_mensuelle = nombre(params.get("epargne"), 500)
+    rendement_epargne = nombre(params.get("rendement_epargne"), 0.03)  # 3% livret A
+    duree_annees = nombre(params.get("duree_analyse"), 20)
+    charges_locatives = nombre(params.get("charges_locatives"), 50)
 
-    mois = duree_annees * 12
-    epargne_cumulee = 0
+    mois = int(duree_annees * 12)
+    # Le locataire conserve son apport et le place.
+    epargne_cumulee = nombre(params.get("apport"), 50000)
     loyer_actuel = loyer_mensuel
     resultats = []
 
@@ -232,16 +239,15 @@ def simulation_location(params):
 
 def simulation_achat(params):
     """Simule le scénario achat avec patrimoine net."""
-    prix = params.get("prix", 300000)
-    apport = params.get("apport", 50000)
-    duree_annees = params.get("duree_analyse", 20)
-    plus_value_annuelle = params.get("plus_value", 0.02)  # 2% par défaut
-    charges_copro = params.get("charges_copro", 100)
-    taxe_fonciere = params.get("taxe_fonciere", 1500)
-    assurance_habitation = params.get("assurance_habitation", 20)
+    prix = nombre(params.get("prix"), 300000)
+    apport = nombre(params.get("apport"), 50000)
+    plus_value_annuelle = nombre(params.get("plus_value"), 0.02)  # 2% par défaut
+    charges_copro = nombre(params.get("charges_copro"), 100)
+    taxe_fonciere = nombre(params.get("taxe_fonciere"), 1500)
+    assurance_habitation = nombre(params.get("assurance_habitation"), 20)
 
     # Utiliser la simulation VEFA existante pour les mensualités
-    p = {
+    p = nettoyer({
         "prix": prix,
         "apport": apport,
         "date_achat": "2024-01-01",
@@ -256,7 +262,7 @@ def simulation_achat(params):
         "al": params.get("al", 0),
         "taux_al": params.get("taux_al", 1.0),
         "duree_al": params.get("duree_al", 18),
-    }
+    })
 
     nb, princ, total, rows = simuler(p)
     valeur_immobiliere = prix
@@ -350,8 +356,18 @@ def geocoder_adresse(adresse):
         return {"success": False, "error": str(e)}
 
 
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+]
+
+
 def rechercher_poi(lat, lon, rayon=500):
     """Recherche les POI (Points of Interest) autour d'une position via Overpass API."""
+    lat, lon, rayon = nombre(lat, None), nombre(lon, None), nombre(rayon, 500)
+    if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return {"success": False, "error": "Coordonnées invalides"}
+    rayon = int(min(max(rayon, 50), 5000))
     try:
         # Requête Overpass QL pour les commodités principales
         overpass_query = f"""
@@ -371,13 +387,20 @@ def rechercher_poi(lat, lon, rayon=500):
         );
         out body;
         """
-        url = "https://overpass-api.de/api/interpreter"
         headers = {
             "User-Agent": "VEFA-Dashboard/1.0 (immobilier-simulation)"
         }
-        response = requests.post(url, data=overpass_query, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        erreur = None
+        for url in OVERPASS_URLS:  # le serveur principal est souvent saturé
+            try:
+                response = requests.post(url, data={"data": overpass_query}, headers=headers, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                break
+            except (requests.RequestException, ValueError) as e:
+                erreur = e
+        else:
+            raise erreur
 
         poi = []
         for element in data.get("elements", []):
@@ -424,7 +447,7 @@ def calculer_rating_quartier(poi):
     # Compter les POI par catégorie
     par_type = {}
     for p in poi:
-        par_type[p["type"]] = par_type.get(p["type"], 0) + 1
+        par_type[p.get("type")] = par_type.get(p.get("type"), 0) + 1
 
     # Score par catégorie (max 1 point par catégorie)
     score = 0
@@ -474,13 +497,14 @@ def determiner_zone_par_code_postal(code_postal):
         "93500": "Abis", "94000": "Abis", "94100": "Abis", "94200": "Abis", "94220": "Abis",  # Arcueil
         "94300": "Abis", "94400": "Abis", "94500": "Abis", "94600": "Abis", "94700": "Abis", "94800": "Abis",
         # Autres communes IDF - Zone A
-        "77": "A", "78": "A", "91": "A", "92": "A", "93": "A", "94": "A", "95": "A",
+        "75": "Abis", "77": "A", "78": "A", "91": "A", "92": "A", "93": "A", "94": "A", "95": "A",
         # Grandes métropoles - Zone A
         "06": "A", "13": "A", "69": "A", "59": "A", "31": "A", "33": "A", "44": "A",
         # Autres - Zone B1
         "default": "B1",
     }
 
+    code_postal = str(code_postal or "").strip()
     # Vérifier d'abord le code postal complet
     if code_postal in zones_par_code_postal:
         return zones_par_code_postal[code_postal]
@@ -554,14 +578,11 @@ def nettoyer(brut):
     p = {}
     for k, defaut in DEFAULTS.items():
         v = brut.get(k, defaut)
-        try:
-            p[k] = v if isinstance(defaut, str) else float(v)
-        except (TypeError, ValueError):
-            p[k] = defaut
+        p[k] = v if isinstance(defaut, str) else nombre(v, defaut)
     for k in ("date_achat", "date_liv"):
         try:
             mois_entre(p[k], p[k])
-        except ValueError:
+        except (AttributeError, ValueError):
             p[k] = DEFAULTS[k]
     if p["fonds"] not in ("vefa", "lin", "tout"):
         p["fonds"] = "vefa"
@@ -722,6 +743,11 @@ def synthese(p):
 
 
 # ---------------------------------------------------------------- routes
+def corps_json():
+    corps = request.get_json(silent=True)
+    return corps if isinstance(corps, dict) else {}
+
+
 @app.get("/")
 def index():
     return render_template("index.html", groupes=GROUPES, defaults=DEFAULTS, lien_limites=True)
@@ -744,36 +770,41 @@ def analyse():
 
 @app.post("/api/simulate")
 def api_simulate():
-    scenarios = (request.get_json(silent=True) or {}).get("scenarios", [])[:4]
-    return jsonify([synthese(nettoyer(s)) for s in scenarios])
+    corps = request.get_json(silent=True)
+    scenarios = corps.get("scenarios") if isinstance(corps, dict) else None
+    if not isinstance(scenarios, list):
+        scenarios = []
+    return jsonify([synthese(nettoyer(s if isinstance(s, dict) else {})) for s in scenarios[:4]])
 
 
 @app.post("/api/eligibilite")
 def api_eligibilite():
     """API pour tester l'éligibilité aux aides."""
-    params = request.get_json(silent=True) or {}
+    params = corps_json()
     return jsonify(eligibilite_aides(params))
 
 
 @app.post("/api/comparer")
 def api_comparer():
     """API pour comparer location vs achat."""
-    params = request.get_json(silent=True) or {}
+    params = corps_json()
     return jsonify(comparer_location_achat(params))
 
 
 @app.post("/api/geocoder")
 def api_geocoder():
     """API pour géocoder une adresse."""
-    params = request.get_json(silent=True) or {}
-    adresse = params.get("adresse", "")
+    params = corps_json()
+    adresse = str(params.get("adresse") or "").strip()
+    if not adresse:
+        return jsonify({"success": False, "error": "Adresse vide"})
     return jsonify(geocoder_adresse(adresse))
 
 
 @app.post("/api/poi")
 def api_poi():
     """API pour rechercher les POI autour d'une position."""
-    params = request.get_json(silent=True) or {}
+    params = corps_json()
     lat = params.get("lat")
     lon = params.get("lon")
     rayon = params.get("rayon", 500)
@@ -783,15 +814,16 @@ def api_poi():
 @app.post("/api/rating")
 def api_rating():
     """API pour calculer le rating du quartier."""
-    params = request.get_json(silent=True) or {}
-    poi = params.get("poi", [])
+    params = corps_json()
+    poi = params.get("poi")
+    poi = [p for p in poi if isinstance(p, dict)] if isinstance(poi, list) else []
     return jsonify(calculer_rating_quartier(poi))
 
 
 @app.post("/api/zone")
 def api_zone():
     """API pour déterminer la zone géographique par code postal."""
-    params = request.get_json(silent=True) or {}
+    params = corps_json()
     code_postal = params.get("code_postal", "")
     return jsonify({"zone": determiner_zone_par_code_postal(code_postal)})
 

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Limites du modèle – comparateur VEFA</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<main class="doc">
+  <header>
+    <h1>Limites du modèle<br>et pistes d'amélioration</h1>
+    <div class="bar"></div>
+    <p class="sub"><a href="{{ url_for('index') }}">Retour au comparateur</a></p>
+  </header>
+
+  <section class="card">
+    <h2>Verdict de la vérification</h2>
+    <p>La mécanique de calcul est cohérente : elle est reproduite à 2 centimes près par un second calcul indépendant, respecte les règles d'un prêt amortissable et donne les mêmes résultats que votre simulateur d'origine. Les risques viennent surtout des <b>hypothèses</b> du modèle et de ce qu'il ne mesure pas encore, pas de la mécanique elle-même. Les chiffres ci-dessous portent sur le cas de référence : 302 000 €, apport 50 000 €, PTZ 54 000 €, Action Logement 30 000 €, 18 ans après livraison.</p>
+  </section>
+
+  <section class="card">
+    <h2>Ce qui a été vérifié</h2>
+    <div class="scroll"><table class="txt">
+      <tr><th>Contrôle</th><th>Résultat</th></tr>
+      <tr><td>Mensualité d'un prêt de 100 000 € à 4 % sur 20 ans : 605,98 € (valeur de référence connue)</td><td class="ok">Conforme</td></tr>
+      <tr><td>Second calcul indépendant (formules fermées du capital restant dû), 373 scénarios aléatoires : écart maximal par mensualité inférieur à 0,02 €</td><td class="ok">Conforme</td></tr>
+      <tr><td>320 scénarios aléatoires : capital remboursé égal au capital emprunté pour chaque prêt, capital restant dû nul à la fin et jamais négatif, total remboursé = emprunté + intérêts + assurance, détail = mensualité, périodes et années couvrant tous les mois</td><td class="ok">Conforme</td></tr>
+      <tr><td>Cas limites : taux 0 %, livraison immédiate ou antérieure à l'achat, apport égal au prix, PTZ sans durée de remboursement, saisies invalides</td><td class="ok">Aucune erreur, alertes affichées</td></tr>
+      <tr><td>Version iPad (JavaScript) contre version Mac (Python), 300 scénarios, 4 651 indicateurs comparés : écart maximal 0,01 €</td><td class="ok">Conforme</td></tr>
+      <tr><td>Simulateur d'origine fourni : mêmes mensualité finale et coût du crédit sur 2 jeux de paramètres</td><td class="ok">Conforme</td></tr>
+      <tr><td>Calcul à la main du premier mois après livraison : intérêts 585 € (168 000 × 4 %/12 + 30 000 × 1 %/12), PTZ 450 € (54 000 / 120), assurance 52,50 € (252 000 × 0,25 %/12)</td><td class="ok">Conforme</td></tr>
+      <tr><td>Anomalie trouvée : le « maximum avant livraison » pouvait être négatif quand le prêt principal l'était (scénario déjà signalé par une alerte)</td><td>Corrigée</td></tr>
+    </table></div>
+    <p class="note">Pour relancer les contrôles : <code>python3 -m unittest discover -s tests -v</code> puis <code>python3 tests/parite_js.py</code>.</p>
+  </section>
+
+  <section class="card">
+    <h2>Hypothèses à confirmer auprès de la banque</h2>
+    <div class="scroll"><table class="txt">
+      <tr><th>Sujet</th><th>Ce que fait l'outil</th><th>Impact possible</th></tr>
+      <tr><td>Assurance</td><td>Taux appliqué au capital initial de tous les prêts, PTZ compris, jusqu'à la fin du plus long prêt</td><td>12 304 € ici. Environ 11 200 € si chaque prêt est assuré jusqu'à son terme, environ 6 600 € si l'assurance porte sur le capital restant dû. Selon le contrat, l'outil surestime donc le coût.</td></tr>
+      <tr><td>Différé du PTZ</td><td>Compté à partir de la livraison</td><td>Il peut courir dès le premier déblocage : la mensualité du PTZ démarrerait alors plus tôt. À confirmer.</td></tr>
+      <tr><td>Appels de fonds</td><td>Paliers à 3, 9 et 18 mois (5 / 35 / 70 / 95 %), le solde étant appelé à la livraison sans intérêts</td><td>L'échéancier réel du promoteur suit l'avancement du chantier, pas un calendrier fixe.</td></tr>
+      <tr><td>Déblocage</td><td>Apport utilisé en premier, puis les trois prêts débloqués au prorata</td><td>L'ordre réel dépend des banques et peut décaler les intérêts de chantier.</td></tr>
+      <tr><td>Action Logement</td><td>Intérêts payés pendant le chantier, sans différé</td><td>À vérifier sur l'offre de prêt.</td></tr>
+      <tr><td>Taux et arrondis</td><td>Taux fixe, mensualités non arrondies au centime</td><td>Écart de quelques euros sur toute la durée.</td></tr>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <h2>Imperfections connues</h2>
+    <div class="scroll"><table class="txt">
+      <tr><th>Imperfection</th><th>Conséquence</th><th>Gravité</th><th>Statut</th></tr>
+      <tr><td>Aucun frais hors mensualité : notaire, garantie, dossier, courtage, charges de copropriété, taxe foncière, ameublement</td><td>La marge affichée est trop optimiste de tout ce qui n'est pas la mensualité.</td><td><span class="chip haut">Élevée</span></td><td class="ko">Non corrigé</td></tr>
+      <tr><td>Pas de retard de livraison</td><td>Chaque mois de retard coûte le loyer et la mensualité de chantier, soit environ 2 600 € ici (2 000 € + 599,30 €). C'est le principal risque d'une VEFA.</td><td><span class="chip haut">Élevée</span></td><td class="ko">Non corrigé</td></tr>
+      <tr><td>Budget constant pendant 20 ans</td><td>Ni indexation du loyer ou de l'épargne, ni évolution des revenus, ni inflation.</td><td><span class="chip moyen">Moyenne</span></td><td class="ok">Partiellement corrigé</td></tr>
+      <tr><td>Aucun contrôle d'éligibilité ni d'endettement</td><td>Plafonds et conditions du PTZ et d'Action Logement, taux d'endettement de 35 % : rien ne signale un scénario irréaliste.</td><td><span class="chip moyen">Moyenne</span></td><td class="ok">Corrigé</td></tr>
+      <tr><td>Pas de TAEG, de remboursement anticipé ni de modulation</td><td>Le coût du crédit exclut les frais, et on ne peut pas tester un remboursement par l'épargne.</td><td><span class="chip bas">Faible</span></td><td class="ko">Non corrigé</td></tr>
+      <tr><td>Calcul au mois près</td><td>Le jour du mois est ignoré (achat, livraison, fin du loyer).</td><td><span class="chip bas">Faible</span></td><td class="ko">Non corrigé</td></tr>
+      <tr><td>Scénarios non sauvegardés</td><td>Ils disparaissent si la page est rechargée, sans export CSV ni PDF.</td><td><span class="chip moyen">Moyenne</span></td><td class="ko">Non corrigé</td></tr>
+      <tr><td>Dépend d'Internet et de deux moteurs de calcul</td><td>Graphiques et polices viennent d'un CDN. La version autonome réécrit le calcul en JavaScript : un contrôle de parité est nécessaire à chaque modification.</td><td><span class="chip bas">Faible</span></td><td class="ko">Non corrigé</td></tr>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <h2>Pistes d'amélioration, par priorité</h2>
+    <div class="scroll"><table class="txt">
+      <tr><th>Piste</th><th>Pourquoi</th><th>Effort</th><th>Statut</th></tr>
+      <tr><td>Test d'éligibilité aux aides (PTZ, Action Logement, PAS, PSLA)</td><td>Vérifie les plafonds de ressources et conditions pour chaque aide selon la zone géographique.</td><td>Moyen</td><td class="ok">Implémenté</td></tr>
+      <tr><td>Comparaison Location vs Achat avec breakpoint</td><td>Simule le scénario d'épargne pendant la location et identifie l'année où l'achat devient plus rentable.</td><td>Moyen</td><td class="ok">Implémenté</td></tr>
+      <tr><td>Analyse de bien avec carte et commodités proches</td><td>Identifie les transports, écoles, commerces, santé dans le rayon et donne un rating du quartier.</td><td>Moyen</td><td class="ok">Implémenté</td></tr>
+      <tr><td>Paramètre « retard de livraison » en mois</td><td>Mesure le risque le plus coûteux : loyer et intérêts continuent.</td><td>Faible</td><td class="ko">Non implémenté</td></tr>
+      <tr><td>Frais annexes (notaire en VEFA, garantie, dossier) et TAEG</td><td>Rend la marge et le coût du crédit comparables à une offre réelle.</td><td>Moyen</td><td class="ko">Non implémenté</td></tr>
+      <tr><td>Choix de la base d'assurance (capital initial, capital restant dû, par prêt)</td><td>Fait varier le coût du crédit de plusieurs milliers d'euros.</td><td>Faible</td><td class="ko">Non implémenté</td></tr>
+      <tr><td>Taux d'endettement et tests de résistance (taux plus élevé, loyer indexé, revenus en baisse)</td><td>Dit si le scénario passe chez la banque et s'il tient en cas de choc.</td><td>Moyen</td><td class="ko">Non implémenté</td></tr>
+      <tr><td>Appels de fonds personnalisables selon l'échéancier du promoteur</td><td>Affine les intérêts de chantier (≈ 10 700 € ici).</td><td>Moyen</td><td class="ko">Non implémenté</td></tr>
+      <tr><td>Sauvegarde et export des scénarios (JSON, CSV, PDF)</td><td>Permet de les retrouver et de les présenter à la banque.</td><td>Moyen</td><td class="ko">Non implémenté</td></tr>
+      <tr><td>Remboursement anticipé et modulation des mensualités</td><td>Simule l'usage de l'épargne une fois le loyer arrêté.</td><td>Moyen</td><td class="ko">Non implémenté</td></tr>
+      <tr><td>Fonctionnement hors ligne et moteur de calcul unique</td><td>Supprime le CDN et le risque d'écart entre les deux versions.</td><td>Moyen</td><td class="ko">Non implémenté</td></tr>
+    </table></div>
+  </section>
+  <p class="note">Simulation indicative : elle ne remplace ni une offre de prêt, ni l'avis de votre banque ou d'un courtier.</p>
+</main>
+</body>
+</html>

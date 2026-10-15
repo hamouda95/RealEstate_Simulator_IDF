@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test d'éligibilité aux aides – VEFA</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<main>
+  <header>
+    <h1>Test d'éligibilité aux aides</h1>
+    <div class="bar"></div>
+    <p class="sub">Découvrez les aides auxquelles vous avez droit pour votre projet immobilier.</p>
+    <p class="lien"><a href="{{ url_for('index') }}">← Retour au comparateur</a></p>
+  </header>
+
+  <div class="layout">
+    <aside class="panel">
+      <h2>Votre situation</h2>
+      
+      <div class="f">
+        <label for="revenu_fiscal">Revenu fiscal de référence N-2 (€)</label>
+        <input type="number" id="revenu_fiscal" min="0" max="200000" step="1000" value="45000">
+      </div>
+
+      <div class="f">
+        <label for="nb_personnes">Nombre de personnes dans le foyer</label>
+        <input type="number" id="nb_personnes" min="1" max="10" step="1" value="2">
+      </div>
+
+      <div class="f full">
+        <label for="zone">Zone géographique</label>
+        <select id="zone">
+          <option value="A">Zone A (Paris, Île-de-France, grandes métropoles)</option>
+          <option value="Abis">Zone A bis (Paris et 76 communes IDF)</option>
+          <option value="B1" selected>Zone B1 (Agglomérations >250 000 hab.)</option>
+          <option value="B2">Zone B2 (Agglomérations >50 000 hab.)</option>
+          <option value="C">Zone C (Reste du territoire)</option>
+        </select>
+      </div>
+
+      <div class="f full">
+        <label for="type_logement">Type de logement</label>
+        <select id="type_logement">
+          <option value="neuf" selected>Logement neuf</option>
+          <option value="vefa">VEFA (vente en l'état futur d'achèvement)</option>
+          <option value="ancien">Logement ancien avec travaux</option>
+        </select>
+      </div>
+
+      <div class="f">
+        <label for="prix">Prix du bien (€)</label>
+        <input type="number" id="prix" min="50000" max="1000000" step="1000" value="300000">
+      </div>
+
+      <div class="f full">
+        <label>
+          <input type="checkbox" id="salarie"> Salarié d'entreprise ≥10 salariés (Action Logement)
+        </label>
+      </div>
+
+      <button id="tester">Tester mon éligibilité</button>
+    </aside>
+
+    <section class="results">
+      <div id="resultats"></div>
+      <div id="loading" style="display:none;">
+        <p>Calcul en cours...</p>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function testerEligibilite() {
+  const params = {
+    revenu_fiscal: parseFloat($('revenu_fiscal').value) || 0,
+    nb_personnes: parseInt($('nb_personnes').value) || 1,
+    zone: $('zone').value,
+    type_logement: $('type_logement').value,
+    prix: parseFloat($('prix').value) || 0,
+    salarie: $('salarie').checked,
+  };
+
+  $('loading').style.display = 'block';
+  $('resultats').innerHTML = '';
+
+  try {
+    const response = await fetch('/api/eligibilite', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(params),
+    });
+    const data = await response.json();
+    afficherResultats(data);
+  } catch (error) {
+    $('resultats').innerHTML = `<p class="warn">Erreur: ${error.message}</p>`;
+  } finally {
+    $('loading').style.display = 'none';
+  }
+}
+
+function afficherResultats(aides) {
+  let html = '<h2>Résultats</h2>';
+
+  for (const [nom, aide] of Object.entries(aides)) {
+    if (aide.eligible) {
+      html += `<div class="card ok">
+        <h3>✓ ${nom}</h3>
+        <p>`;
+      
+      if (aide.montant_max) {
+        html += `<strong>Montant maximal: ${aide.montant_max.toLocaleString('fr-FR')} €</strong><br>`;
+      }
+      if (aide.quotite) {
+        html += `Quotité finançable: ${aide.quotite}%<br>`;
+      }
+      if (aide.duree_max) {
+        html += `Durée maximale: ${aide.duree_max} ans<br>`;
+      }
+      if (aide.tranche) {
+        html += `Tranche: ${aide.tranche}<br>`;
+      }
+      if (aide.taux) {
+        html += `Taux: ${aide.taux}%<br>`;
+      }
+      if (aide.plafond_zone) {
+        html += `<small>Plafond zone: ${aide.plafond_zone.toLocaleString('fr-FR')} € (ratio: ${aide.ratio_revenu})</small><br>`;
+      }
+      if (aide.avantages) {
+        html += `<ul>${aide.avantages.map(a => `<li>${a}</li>`).join('')}</ul>`;
+      }
+      if (aide.condition) {
+        html += `<small>${aide.condition}</small>`;
+      }
+      
+      html += `</p></div>`;
+    } else {
+      html += `<div class="card ko">
+        <h3>✗ ${nom}</h3>
+        <p><small>${aide.raison}</small></p>
+      </div>`;
+    }
+  }
+
+  $('resultats').innerHTML = html;
+}
+
+$('tester').addEventListener('click', testerEligibilite);
+</script>
+</body>
+</html>

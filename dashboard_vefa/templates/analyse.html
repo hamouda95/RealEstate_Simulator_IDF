@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analyse de bien – VEFA</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Analyse de bien</h1>
+    <div class="bar"></div>
+    <p class="sub">Entrez une adresse pour analyser le quartier et les commodités proches.</p>
+    <p class="lien"><a href="{{ url_for('index') }}">← Retour au comparateur</a></p>
+  </header>
+
+  <div class="layout">
+    <aside class="panel">
+      <h2>Adresse du bien</h2>
+      
+      <div class="f full">
+        <label for="adresse">Adresse complète</label>
+        <input type="text" id="adresse" placeholder="Ex: 123 rue de Paris, 75001 Paris">
+      </div>
+
+      <div class="f">
+        <label for="rayon">Rayon de recherche  mètres)</label>
+        <input type="number" id="rayon" min="100" max="2000" step="100" value="500">
+      </div>
+
+      <button id="analyser">Analyser le bien</button>
+
+      <div id="zone-info" style="display:none;" class="card">
+        <h3>Zone détectée</h3>
+        <p><strong id="zone-texte">-</strong></p>
+      </div>
+    </aside>
+
+    <section class="results">
+      <div id="map" style="height: 400px; margin-bottom: 20px;"></div>
+      
+      <div id="poi-results" style="display:none;">
+        <h2>Commodités proches</h2>
+        <div id="poi-liste"></div>
+      </div>
+
+      <div id="loading" style="display:none;">
+        <p>Analyse en cours...</p>
+      </div>
+
+      <div id="error" style="display:none;" class="card ko">
+        <p id="error-text"></p>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let map = null;
+let markers = [];
+
+function initMap() {
+  map = L.map('map').setView([48.8566, 2.3522], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+}
+
+function clearMarkers() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+}
+
+async function analyserBien() {
+  const adresse = $('adresse').value.trim();
+  if (!adresse) {
+    showError("Veuillez entrer une adresse");
+    return;
+  }
+
+  const rayon = parseInt($('rayon').value) || 500;
+  $('loading').style.display = 'block';
+  $('error').style.display = 'none';
+  $('poi-results').style.display = 'none';
+  clearMarkers();
+
+  try {
+    // Géocodage
+    const geoResponse = await fetch('/api/geocoder', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({adresse}),
+    });
+    const geoData = await geoResponse.json();
+
+    if (!geoData.success) {
+      throw new Error(geoData.error || "Adresse non trouvée");
+    }
+
+    // Centrer la carte
+    const lat = geoData.lat;
+    const lon = geoData.lon;
+    map.setView([lat, lon], 15);
+    
+    // Marqueur principal
+    const mainMarker = L.marker([lat, lon], {
+      icon: L.divIcon({
+        className: 'custom-marker',
+        html: '<div style="background:#e74c3c;width:20px;height:20px;border-radius:50%;border:3px solid white;"></div>',
+        iconSize: [20, 20],
+      })
+    }).addTo(map).bindPopup(geoData.display_name);
+    markers.push(mainMarker);
+
+    // Cercle de rayon
+    const circle = L.circle([lat, lon], {
+      color: '#3498db',
+      fillColor: '#3498db',
+      fillOpacity: 0.1,
+      radius: rayon,
+    }).addTo(map);
+    markers.push(circle);
+
+    // Déterminer la zone
+    const codePostalMatch = geoData.display_name.match(/\b(\d{5})\b/);
+    if (codePostalMatch) {
+      const zoneResponse = await fetch('/api/zone', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({code_postal: codePostalMatch[1]}),
+      });
+      const zoneData = await zoneResponse.json();
+      $('zone-info').style.display = 'block';
+      $('zone-texte').textContent = `Zone ${zoneData.zone}`;
+    }
+
+    // Rechercher les POI
+    const poiResponse = await fetch('/api/poi', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({lat, lon, rayon}),
+    });
+    const poiData = await poiResponse.json();
+
+    if (poiData.success) {
+      afficherPOI(poiData.poi, lat, lon);
+      
+      // Calculer le rating
+      const ratingResponse = await fetch('/api/rating', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({poi: poiData.poi}),
+      });
+      const ratingData = await ratingResponse.json();
+      afficherRating(ratingData);
+    }
+
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    $('loading').style.display = 'none';
+  }
+}
+
+function afficherPOI(poi, centerLat, centerLon) {
+  $('poi-results').style.display = 'block';
+  
+  // Grouper par type
+  const parType = {};
+  poi.forEach(p => {
+    if (!parType[p.type]) parType[p.type] = [];
+    parType[p.type].push(p);
+  });
+
+  const colors = {
+    'Transport': '#e74c3c',
+    'Éducation': '#3498db',
+    'Commerce': '#2ecc71',
+    'Santé': '#f39c12',
+    'Loisir': '#9b59b6',
+    'Restaurant': '#f59e0b',
+  };
+
+  let html = '';
+  for (const [type, items] of Object.entries(parType)) {
+    const color = colors[type] || '#95a5a6';
+    html += `<div class="card">
+      <h3 style="color:${color}">${type} (${items.length})</h3>
+      <ul>`;
+    
+    items.forEach(item => {
+      html += `<li>${item.nom}</li>`;
+      
+      // Marqueur sur la carte
+      const marker = L.circleMarker([item.lat, item.lon], {
+        radius: 6,
+        fillColor: color,
+        color: '#fff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8,
+      }).addTo(map).bindPopup(`${item.nom} (${type})`);
+      markers.push(marker);
+    });
+    
+    html += `</ul></div>`;
+  }
+
+  $('poi-liste').innerHTML = html;
+}
+
+function afficherRating(rating) {
+  const ratingDiv = document.createElement('div');
+  ratingDiv.className = 'card ok';
+  ratingDiv.innerHTML = `
+    <h3>Rating du quartier</h3>
+    <p style="font-size: 24px; font-weight: 600; color: var(--good);">
+      ${rating.etoiles} ${rating.note_sur_5}
+    </p>
+    <p><small>${rating.total_poi} commodités trouvées dans le rayon</small></p>
+  `;
+  
+  // Insérer avant la liste des POI
+  const poiResults = $('poi-results');
+  const firstCard = poiResults.querySelector('.card');
+  if (firstCard) {
+    poiResults.insertBefore(ratingDiv, firstCard);
+  } else {
+    poiResults.appendChild(ratingDiv);
+  }
+}
+
+function showError(message) {
+  $('error').style.display = 'block';
+  $('error-text').textContent = message;
+}
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+  $('analyser').addEventListener('click', analyserBien);
+});
+</script>
+</body>
+</html>

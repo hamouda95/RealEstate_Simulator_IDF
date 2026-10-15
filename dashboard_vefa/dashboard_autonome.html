@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Comparateur de scénarios – prêt VEFA</title>
+<style>:root{--bg:#eef1ee;--card:#fbfcfb;--ink:#15241f;--mute:#5b6b65;--line:#dde4e0;
+--s1:#0f5c4d;--s2:#c28a1e;--s3:#3b6fb6;--s4:#b5462f;--good:#0f6b4f;--bad:#b5462f;
+--serif:Fraunces,Georgia,"Times New Roman",serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1614;--card:#162120;--ink:#e8efec;--mute:#93a39d;--line:#27342f;
+--s1:#3fb59d;--s2:#e3b04b;--s3:#6f9fe0;--s4:#e0735c;--good:#4cc2a0;--bad:#e8806a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "Source Sans 3","Segoe UI",system-ui,sans-serif}
+h1,h2,.blk b,.budget strong{font-family:var(--serif);font-weight:600}
+main{max-width:1320px;margin:0 auto;padding:28px 18px 48px}
+header{margin-bottom:18px}
+h1{font-size:clamp(26px,4.2vw,38px);line-height:1.12;letter-spacing:-.01em;margin:0 0 12px}
+.bar{width:112px;height:4px;border-radius:2px;margin-bottom:12px;
+ background:linear-gradient(90deg,var(--s1) 25%,var(--s2) 25% 50%,var(--s3) 50% 75%,var(--s4) 75%)}
+.sub{color:var(--mute);margin:0;max-width:64ch}
+
+.card,.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 1px 2px rgba(20,35,31,.05)}
+.card h2{font-size:18px;margin:0 0 10px}
+
+.budget{display:flex;flex-wrap:wrap;align-items:center;gap:8px 26px;margin-bottom:16px}
+.budget .f{margin:0;grid-template-columns:auto auto;gap:10px}
+.budget .bt{margin-left:auto;color:var(--mute);font-size:14px}
+.budget strong{font-size:19px;color:var(--ink)}
+
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.tab{display:flex;align-items:center;gap:8px;padding:7px 14px;border:1px solid var(--line);border-radius:999px;background:var(--card);cursor:pointer;box-shadow:0 1px 2px rgba(20,35,31,.04)}
+.tab i{width:12px;height:12px;border-radius:50%;background:var(--c)}
+.tab[aria-current="true"]{border:2px solid var(--c);padding:6px 13px;font-weight:600}
+.tab.add{color:var(--mute);border-style:dashed;box-shadow:none}
+
+.layout{display:grid;grid-template-columns:330px minmax(0,1fr);gap:20px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.panel{border-top:4px solid var(--c,var(--s1))}
+@media(min-width:901px){.panel{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}}
+.panel h2{font-size:16px;margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.results{display:grid;gap:16px;min-width:0}
+
+.f{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;margin:9px 0}
+.f label{font-size:13px;color:var(--mute)}
+.f.full{grid-template-columns:1fr}
+.f input[type=number],.f input[type=date],.f input[type=text],.f select{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+.f input[type=number],.f input[type=date]{width:128px;text-align:right}
+.f input[type=text],.f select{width:100%}
+.f input[type=range]{grid-column:1/3;width:100%;accent-color:var(--c,var(--s1))}
+.nom{grid-template-columns:1fr}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+button{font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--mute)}
+button:focus-visible,input:focus-visible,select:focus-visible,.tab:focus-visible{outline:2px solid var(--s1);outline-offset:1px}
+
+.cv{position:relative;height:300px}.cv.short{height:240px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--mute);font-weight:600;font-size:12.5px}
+th[style*="--c"]{border-bottom:3px solid var(--c);color:var(--ink)}
+th .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:var(--c)}
+tbody tr:hover td,tr:hover>td{background:color-mix(in srgb,var(--s1) 5%,transparent)}
+tr.hl td{font-weight:600;background:color-mix(in srgb,var(--s1) 9%,transparent)}
+tr.sub td{color:var(--mute);font-size:13px}tr.sub td:first-child{padding-left:24px}
+.delta{display:block;font-size:11.5px;font-weight:400}
+.delta.neg{color:var(--good)}.delta.pos{color:var(--bad)}
+td.ok,td.ko{font-weight:600}.ok{color:var(--good)}.ko{color:var(--bad)}
+.warn{color:var(--bad);font-weight:600;margin:0 0 6px}
+.note{font-size:12.5px;color:var(--mute);margin:0;max-width:90ch}
+
+.head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}.head h2{margin:0}
+.seg{display:flex}.seg button{border-radius:0}.seg button:first-child{border-radius:6px 0 0 6px}.seg button:last-child{border-radius:0 6px 6px 0;border-left:0}
+.seg button[aria-pressed="true"]{background:var(--s1);color:#fff;border-color:var(--s1)}
+.tall{max-height:420px;overflow:auto}.tall th{position:sticky;top:0;background:var(--card)}
+
+.frise{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px}
+.blk{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border:1px solid var(--line);border-top:4px solid var(--g);border-radius:8px;background:color-mix(in srgb,var(--g) 8%,var(--card))}
+.blk b{font-size:18px;line-height:1.15;font-variant-numeric:tabular-nums}
+.blk span{font-size:12.5px;line-height:1.3}.blk small{color:var(--mute);font-size:12px}
+.blk.ok{--g:var(--good)}.blk.ko{--g:var(--bad)}
+.doc{max-width:1040px;display:grid;gap:16px}.doc header{margin-bottom:0}
+.doc p{margin:0 0 8px;max-width:78ch}.sub a{color:var(--s1);font-weight:600}
+table.txt td{white-space:normal;text-align:left;vertical-align:top;min-width:140px}
+table.txt th{text-align:left}table.txt td:last-child{min-width:110px}
+.chip{display:inline-block;padding:1px 10px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid currentColor}
+.chip.haut{color:var(--bad)}.chip.moyen{color:var(--s2)}.chip.bas{color:var(--mute)}
+code{background:var(--bg);padding:1px 6px;border-radius:4px;font-size:12.5px}
+.lien{margin:10px 0 0}.lien a{color:var(--s1);font-weight:600}
+:root[data-theme="dark"]{--bg:#0f1715;--card:#17211f;--ink:#e8efec;--mute:#93a39d;--line:#2a3733;--s1:#3fb59d;--s2:#e3b04b;--s3:#6f9fe0;--s4:#e0735c;--good:#3fb59d;--bad:#e0735c}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Comparateur de scénarios<br>de prêt immobilier en VEFA</h1>
+    <div class="bar"></div>
+    <p class="sub">Créez jusqu'à 4 scénarios, ajustez les paramètres et comparez la mensualité réelle, période par période, à ce que votre budget peut absorber.</p>
+    
+  </header>
+  <div class="card budget">
+    <div class="f"><label for="epargne">Épargne mensuelle (€)</label><input type="number" id="epargne" min="0" step="10"></div>
+    <div class="f"><label for="loyer">Loyer mensuel (€)</label><input type="number" id="loyer" min="0" step="10"></div>
+    <div class="f"><label for="finloyer">Plus de loyer à partir de</label><input type="date" id="finloyer"></div>
+    <div class="bt" id="budget-total"></div>
+  </div>
+  <nav class="tabs" id="tabs" aria-label="Scénarios"></nav>
+
+  <div class="layout">
+    <aside class="panel">
+      <div class="f nom"><label for="nom">Nom du scénario</label><input type="text" id="nom"></div>
+      
+      <h2>Projet</h2>
+      
+        
+        <div class="f"><label for="prix">Prix du bien (€)</label>
+          <input type="number" id="prix" data-k="prix" min="100000" max="8000000" step="1000">
+          <input type="range" data-k="prix" min="100000" max="800000" step="1000" aria-label="Prix du bien"></div>
+        
+      
+        
+        <div class="f"><label for="apport">Apport (€)</label>
+          <input type="number" id="apport" data-k="apport" min="0" max="3000000" step="1000">
+          <input type="range" data-k="apport" min="0" max="300000" step="1000" aria-label="Apport"></div>
+        
+      
+        
+        <div class="f"><label for="date_achat">Date d&#39;achat</label>
+          <input type="date" id="date_achat" data-k="date_achat"></div>
+        
+      
+        
+        <div class="f"><label for="date_liv">Date de livraison</label>
+          <input type="date" id="date_liv" data-k="date_liv"></div>
+        
+      
+        
+        <div class="f full"><label for="fonds">Appels de fonds</label>
+          <select id="fonds" data-k="fonds">
+            <option value="vefa">VEFA standard (5/35/70/95 %)</option><option value="lin">Linéaire jusqu&#39;à la livraison</option><option value="tout">Tout débloqué dès l&#39;achat</option>
+          </select></div>
+        
+      
+      
+      <h2>Prêt principal</h2>
+      
+        
+        <div class="f"><label for="taux">Taux d&#39;intérêt (%)</label>
+          <input type="number" id="taux" data-k="taux" min="0" max="80" step="0.05">
+          <input type="range" data-k="taux" min="0" max="8" step="0.05" aria-label="Taux d&#39;intérêt"></div>
+        
+      
+        
+        <div class="f"><label for="duree">Durée après livraison (ans)</label>
+          <input type="number" id="duree" data-k="duree" min="5" max="300" step="1">
+          <input type="range" data-k="duree" min="5" max="30" step="1" aria-label="Durée après livraison"></div>
+        
+      
+        
+        <div class="f"><label for="ass">Assurance (par an) (%)</label>
+          <input type="number" id="ass" data-k="ass" min="0" max="10" step="0.01">
+          <input type="range" data-k="ass" min="0" max="1" step="0.01" aria-label="Assurance (par an)"></div>
+        
+      
+      
+      <h2>PTZ</h2>
+      
+        
+        <div class="f"><label for="ptz">Montant PTZ (€)</label>
+          <input type="number" id="ptz" data-k="ptz" min="0" max="1500000" step="500">
+          <input type="range" data-k="ptz" min="0" max="150000" step="500" aria-label="Montant PTZ"></div>
+        
+      
+        
+        <div class="f"><label for="ptz_dif">Différé (ans)</label>
+          <input type="number" id="ptz_dif" data-k="ptz_dif" min="0" max="150" step="1">
+          <input type="range" data-k="ptz_dif" min="0" max="15" step="1" aria-label="Différé"></div>
+        
+      
+        
+        <div class="f"><label for="ptz_dur">Durée totale (différé inclus) (ans)</label>
+          <input type="number" id="ptz_dur" data-k="ptz_dur" min="5" max="250" step="1">
+          <input type="range" data-k="ptz_dur" min="5" max="25" step="1" aria-label="Durée totale (différé inclus)"></div>
+        
+      
+      
+      <h2>Prêt Action Logement</h2>
+      
+        
+        <div class="f"><label for="al">Montant (€)</label>
+          <input type="number" id="al" data-k="al" min="0" max="400000" step="500">
+          <input type="range" data-k="al" min="0" max="40000" step="500" aria-label="Montant"></div>
+        
+      
+        
+        <div class="f"><label for="taux_al">Taux (%)</label>
+          <input type="number" id="taux_al" data-k="taux_al" min="0" max="30" step="0.05">
+          <input type="range" data-k="taux_al" min="0" max="3" step="0.05" aria-label="Taux"></div>
+        
+      
+        
+        <div class="f"><label for="duree_al">Durée après livraison (ans)</label>
+          <input type="number" id="duree_al" data-k="duree_al" min="5" max="250" step="1">
+          <input type="range" data-k="duree_al" min="5" max="25" step="1" aria-label="Durée après livraison"></div>
+        
+      
+      
+      <div class="actions">
+        <button id="dup">Dupliquer</button>
+        <button id="del">Supprimer</button>
+        <button id="reset">Réinitialiser</button>
+      </div>
+    </aside>
+
+    <section class="results">
+      <div id="alertes"></div>
+      <div class="card"><h2>Comparaison</h2><div class="scroll"><table id="cmp"></table></div></div>
+      <div class="card"><h2>Mensualité mois par mois</h2><div class="cv"><canvas id="c1"></canvas></div></div>
+      <div class="card"><h2 id="per-titre">Mensualité réelle par période</h2><div class="frise" id="frise"></div>
+        <div class="scroll"><table id="periodes"></table></div></div>
+      <div class="card"><h2 id="split-titre">Répartition de la mensualité</h2><div class="cv"><canvas id="c4"></canvas></div></div>
+      <div class="card"><h2>Capital restant dû</h2><div class="cv"><canvas id="c2"></canvas></div></div>
+      <div class="card"><h2>Coût du crédit</h2><div class="cv short"><canvas id="c3"></canvas></div></div>
+      <div class="card"><div class="head"><h2 id="annuel-titre">Synthèse par année</h2>
+        <div class="seg"><button data-v="an" aria-pressed="true">Par an</button><button data-v="mois" aria-pressed="false">Par mois</button></div></div>
+        <div class="scroll tall"><table id="annuel"></table></div></div>
+      <p class="note">Hypothèses : pendant le chantier, seuls les intérêts et l'assurance sur les fonds débloqués sont payés. L'assurance porte sur le capital initial (PTZ inclus). Après livraison, chaque prêt est amorti à mensualité constante. Simulation indicative, à valider avec votre banque.</p>
+    </section>
+  </div>
+</main>
+<script>const DEFAULTS = {"al": 30000, "apport": 50000, "ass": 0.25, "date_achat": "2027-01-01", "date_liv": "2029-07-01", "duree": 18, "duree_al": 18, "fonds": "vefa", "prix": 302000, "ptz": 54000, "ptz_dif": 0, "ptz_dur": 10, "taux": 4.0, "taux_al": 1.0};</script>
+<script>const APPELS=[[0,.05],[3,.35],[9,.70],[18,.95]];
+const pmt=(c,r,n)=>c<=0||n<=0?0:(r===0?c/n:c*r/(1-Math.pow(1+r,-n)));
+const moisEntre=(a,b)=>{const[x,y]=a.split("-").map(Number),[u,v]=b.split("-").map(Number);return (u-x)*12+(v-y)};
+function libelle(k,p){
+ if(k===1)return "Livraison : début des remboursements";
+ const e=[];
+ if(p.ptz_dif>0&&k===p.ptz_dif*12+1)e.push("début du remboursement du PTZ");
+ if(k===p.ptz_dur*12+1)e.push("fin du PTZ");
+ if(k===p.duree_al*12+1)e.push("fin du prêt Action Logement");
+ if(k===p.duree*12+1)e.push("fin du prêt principal");
+ return e.length?e.join(", ").replace(/^./,c=>c.toUpperCase()):"Mensualité modifiée";
+}
+function periodes(rows,nb,p){
+ let segs=[];
+ rows.forEach((x,i)=>{const t=x.total,s=segs[segs.length-1];
+  if(s&&s.phase===x.phase&&Math.abs(t-s.dernier)<1){s.fin=i;s.dernier=t;s.mini=Math.min(s.mini,t);s.maxi=Math.max(s.maxi,t)}
+  else segs.push({phase:x.phase,debut:i,fin:i,dernier:t,mini:t,maxi:t,label:x.phase===1?"Chantier":libelle(x.m-nb,p)})});
+ const ch=segs.filter(s=>s.phase===1);
+ if(ch.length>6)segs=[{phase:1,debut:ch[0].debut,fin:ch[ch.length-1].fin,label:"Chantier",mini:Math.min(...ch.map(s=>s.mini)),maxi:Math.max(...ch.map(s=>s.maxi))},...segs.filter(s=>s.phase===2)];
+ else if(ch.length>1)ch.forEach((s,j)=>s.label="Chantier – palier "+(j+1));
+ const n=rows.length;
+ return segs.map(s=>({label:s.label,phase:s.phase,debut:s.debut,mois:s.fin-s.debut+1,mini:+s.mini.toFixed(2),maxi:+s.maxi.toFixed(2),restant:n-s.debut}));
+}
+function synthese(p){
+ const nb=Math.max(0,moisEntre(p.date_achat,p.date_liv));
+ const princ=p.prix-p.apport-p.ptz-p.al, total=princ+p.ptz+p.al;
+ const r=p.taux/1200,rAl=p.taux_al/1200,ia=p.ass/1200;
+ const mP=pmt(princ,r,p.duree*12),mAl=pmt(p.al,rAl,p.duree_al*12);
+ const mZ=p.ptz/Math.max(1,(p.ptz_dur-p.ptz_dif)*12);
+ const rows=[];
+ for(let m=1;m<=nb;m++){
+  let pct=0;
+  if(p.fonds==="tout")pct=1;else if(p.fonds==="lin")pct=m/nb;
+  else APPELS.forEach(([k,v])=>{if(k<m)pct=v});
+  const deb=Math.min(Math.max(p.prix*pct-p.apport,0),total),part=total>0?deb/total:0;
+  rows.push({m,phase:1,interet:princ*part*r+p.al*part*rAl,princ:0,al:0,ptz:0,ass:deb*ia,balP:princ*part,balAl:p.al*part,balPtz:p.ptz*part});
+ }
+ const hor=Math.round(Math.max(p.duree,p.duree_al,p.ptz_dur)*12),fin=Math.max(p.duree,p.duree_al)*12;
+ let bP=princ,bA=p.al,bZ=p.ptz;
+ for(let k=1;k<=hor;k++){
+  let iP=0,cP=0,iA=0,cA=0,cZ=0;
+  if(k<=p.duree*12&&bP>0.005){iP=bP*r;cP=Math.min(mP-iP,bP);bP-=cP}
+  if(k<=p.duree_al*12&&bA>0.005){iA=bA*rAl;cA=Math.min(mAl-iA,bA);bA-=cA}
+  if(k>p.ptz_dif*12&&k<=p.ptz_dur*12&&bZ>0.005){cZ=Math.min(mZ,bZ);bZ-=cZ}
+  rows.push({m:nb+k,phase:2,interet:iP+iA,princ:cP,al:cA,ptz:cZ,ass:k<=fin?total*ia:0,balP:bP,balAl:bA,balPtz:bZ});
+ }
+ rows.forEach(x=>{x.total=x.interet+x.princ+x.al+x.ptz+x.ass;x.bal=x.balP+x.balAl+x.balPtz});
+ const ph2=rows.filter(x=>x.phase===2);
+ let iz=-1;rows.forEach((x,i)=>{if(x.ptz>0)iz=i});
+ const apres=iz>=0&&iz+1<rows.length?rows[iz+1].total:null;
+ const sum=(a,k)=>a.reduce((s,x)=>s+x[k],0);
+ const interets=sum(rows,"interet"),assurance=sum(rows,"ass");
+ const alertes=[];
+ if(princ<0)alertes.push("L'apport et les aides dépassent le prix : le prêt principal est négatif.");
+ if(p.ptz_dur<=p.ptz_dif)alertes.push("La durée totale du PTZ doit dépasser le différé.");
+ while(rows.length&&rows[rows.length-1].total<=0.005)rows.pop();
+ const [y0,m0]=p.date_achat.split("-").map(Number),an={};
+ rows.forEach(x=>{const y=y0+Math.floor((m0-1+x.m)/12);(an[y]=an[y]||[]).push(x)});
+ const f=ph2[0]||{},dt=k=>rows.map(x=>+x[k].toFixed(2));
+ return{kpis:{mf_princ:f.princ||0,mf_al:f.al||0,mf_ptz:f.ptz||0,mf_interet:f.interet||0,mf_ass:f.ass||0,
+  mensualite_finale:ph2.length?ph2[0].total:0,max_avant:Math.max(0,...rows.filter(x=>x.phase===1).map(x=>x.total)),apres_ptz:apres,
+  pret_principal:Math.max(princ,0),total_emprunte:total,interets,assurance,cout_credit:interets+assurance,total_rembourse:sum(rows,"total"),duree_mois:rows.length,mois_chantier:nb},
+  mensualites:dt("total"),capital:rows.map(x=>Math.round(x.bal)),
+  detail:{princ:dt("princ"),al:dt("al"),ptz:dt("ptz"),interet:dt("interet"),ass:dt("ass")},
+  periodes:periodes(rows,nb,p),
+  annuel:Object.entries(an).map(([y,a])=>({annee:y,mois:a.length,mensualite_moy:sum(a,"total")/a.length,mini:Math.min(...a.map(x=>x.total)),maxi:Math.max(...a.map(x=>x.total)),interets:sum(a,"interet"),assurance:sum(a,"ass"),total:sum(a,"total"),capital_fin:a[a.length-1].bal})),alertes};
+}
+const MAX_SCENARIOS = 4;
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const eur = (x, d = 0) => x.toLocaleString("fr-FR", {style: "currency", currency: "EUR", minimumFractionDigits: d, maximumFractionDigits: d});
+const duree = m => { const a = Math.floor(m / 12), r = m % 12;
+  return [a ? `${a} an${a > 1 ? "s" : ""}` : "", r ? `${r} mois` : ""].filter(Boolean).join(" ") || "0 mois"; };
+const fmt = (v, d) => d === "mois" ? duree(v) : eur(v, d);
+const moisLabel = (date, i) => { const d0 = new Date(date);
+  return new Date(d0.getFullYear(), d0.getMonth() + i + 1, 1).toLocaleDateString("fr-FR", {month: "short", year: "numeric"}); };
+const budget = {epargne: 1130, loyer: 2000, finLoyer: "2029-07-01"};
+const ecartMois = (a, b) => { const [x, y] = a.split("-").map(Number), [u, v] = b.split("-").map(Number); return (u - x) * 12 + (v - y); };
+const idxLoyer = date => ecartMois(date, budget.finLoyer) - 1;           // 1er mois (base 0) sans loyer
+const budgetMois = (i, date) => budget.epargne + (i >= idxLoyer(date) ? budget.loyer : 0);
+const ligneBudget = (len, date) => ({label: "Budget disponible", data: Array.from({length: len}, (_, i) => budgetMois(i, date)),
+  borderColor: css("--ink"), borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false, stepped: true});
+const plage = (a, b) => Math.abs(a - b) < 0.005 ? eur(a, 2) : `${eur(a, 2)} – ${eur(b, 2)}`;
+const signe = (e, d = 2) => `${e >= 0 ? "+" : "−"}${eur(Math.abs(e), d)}`;
+
+const LIGNES = [  // [libellé, clé du KPI, décimales, ligne mise en avant]
+  ["Mensualité finale (après livraison)", "mensualite_finale", 2, "hl"],
+  ["dont capital du prêt principal", "mf_princ", 2, "sub"],
+  ["dont capital Action Logement", "mf_al", 2, "sub"],
+  ["dont capital PTZ", "mf_ptz", 2, "sub"],
+  ["dont intérêts", "mf_interet", 2, "sub"],
+  ["dont assurance", "mf_ass", 2, "sub"],
+  ["Maximum avant livraison", "max_avant", 2],
+  ["Mensualité après la fin du PTZ", "apres_ptz", 2],
+  ["Prêt principal", "pret_principal", 0],
+  ["Total emprunté", "total_emprunte", 0],
+  ["Intérêts", "interets", 0],
+  ["Assurance", "assurance", 0],
+  ["Coût du crédit", "cout_credit", 0, "hl"],
+  ["Total remboursé", "total_rembourse", 0],
+  ["Durée totale du crédit", "duree_mois", "mois"],
+];
+
+let scenarios = [{nom: "Scénario A", p: {...DEFAULTS}}];
+let actif = 0, resultats = [], charts = {}, timer = null;
+const couleur = i => css(`--s${i + 1}`);
+const nomDefaut = () => "Scénario " + "ABCD"[scenarios.length];
+
+// ---------- formulaire
+function remplirFormulaire() {
+  document.querySelectorAll("[data-k]").forEach(el => el.value = scenarios[actif].p[el.dataset.k]);
+  $("nom").value = scenarios[actif].nom;
+  document.querySelector(".panel").style.setProperty("--c", couleur(actif));
+}
+
+document.querySelectorAll("[data-k]").forEach(el => el.addEventListener("input", e => {
+  const k = el.dataset.k, texte = el.type === "date" || el.tagName === "SELECT";
+  const v = texte ? el.value : (parseFloat(el.value) || 0);
+  scenarios[actif].p[k] = v;
+  document.querySelectorAll(`[data-k="${k}"]`).forEach(o => { if (o !== el) o.value = v; });
+  planifier();
+}));
+
+$("nom").addEventListener("input", e => { scenarios[actif].nom = e.target.value || "Sans nom"; renderOnglets(); render(); });
+$("dup").onclick = () => ajouter(structuredClone(scenarios[actif].p));
+$("del").onclick = () => {
+  if (scenarios.length < 2) return;
+  scenarios.splice(actif, 1);
+  actif = Math.min(actif, scenarios.length - 1);
+  tout();
+};
+$("reset").onclick = () => { scenarios[actif].p = {...DEFAULTS}; tout(); };
+
+function ajouter(params) {
+  if (scenarios.length >= MAX_SCENARIOS) return;
+  scenarios.push({nom: nomDefaut(), p: params});
+  actif = scenarios.length - 1;
+  tout();
+}
+
+function renderOnglets() {
+  $("tabs").innerHTML = "";
+  scenarios.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.style.setProperty("--c", couleur(i));
+    b.setAttribute("aria-current", i === actif);
+    b.innerHTML = `<i></i>${s.nom.replace(/</g, "&lt;")}`;
+    b.onclick = () => { actif = i; remplirFormulaire(); renderOnglets(); renderActif(); };
+    $("tabs").append(b);
+  });
+  if (scenarios.length < MAX_SCENARIOS) {
+    const b = document.createElement("button");
+    b.className = "tab add"; b.textContent = "+ Nouveau scénario";
+    b.onclick = () => ajouter({...DEFAULTS});
+    $("tabs").append(b);
+  }
+}
+
+// ---------- calcul (côté Python)
+const planifier = () => { clearTimeout(timer); timer = setTimeout(refresh, 120); };
+
+async function refresh() {
+  try {
+    resultats = scenarios.map(s => synthese(s.p));
+    render();
+  } catch (e) {
+    $("alertes").innerHTML = `<p class="warn">Calcul impossible : ${e.message}</p>`;
+  }
+}
+
+function tout() { remplirFormulaire(); renderOnglets(); refresh(); }
+
+// ---------- affichage
+function render() {
+  if (resultats.length !== scenarios.length) return;
+  $("alertes").innerHTML = resultats.flatMap((r, i) => r.alertes.map(a => `<p class="warn">${scenarios[i].nom} : ${a}</p>`)).join("");
+  renderComparaison(); renderGraphiques(); renderActif();
+}
+
+function renderComparaison() {
+  let t = `<tr><th></th>${scenarios.map((s, i) => `<th style="--c:${couleur(i)}"><span class="dot"></span>${s.nom.replace(/</g, "&lt;")}</th>`).join("")}</tr>`;
+  LIGNES.forEach(([lib, k, d, fort]) => {
+    t += `<tr class="${fort || ""}"><td>${lib}</td>` + resultats.map((r, i) => {
+      const v = r.kpis[k];
+      if (v === null) return "<td>—</td>";
+      const ref = resultats[0].kpis[k];
+      const dv = i > 0 && ref !== null ? v - ref : 0;
+      const delta = i > 0 && Math.abs(dv) >= (d === "mois" ? 0.5 : 0.5 * 10 ** -d)
+        ? `<span class="delta ${dv < 0 ? "neg" : "pos"}">${dv > 0 ? "+" : "−"}${fmt(Math.abs(dv), d)} vs ${scenarios[0].nom}</span>` : "";
+      return `<td>${fmt(v, d)}${delta}</td>`;
+    }).join("") + "</tr>";
+  });
+  t += `<tr class="hl"><td>Marge après livraison (budget − mensualité)</td>` + resultats.map((r, i) => {
+    const e = budgetMois(r.kpis.mois_chantier, scenarios[i].p.date_achat) - r.kpis.mensualite_finale;
+    return `<td class="${e >= 0 ? "ok" : "ko"}">${signe(e)}</td>`; }).join("") + "</tr>";
+  $("cmp").innerHTML = t;
+}
+
+function upsert(id, type, data, options) {
+  const o = {responsive: true, maintainAspectRatio: false, animation: false, ...options};
+  o.plugins = {legend: {position: "bottom"}, ...(options.plugins || {})};
+  if (charts[id]) { charts[id].data = data; charts[id].options = o; charts[id].update(); }
+  else charts[id] = new Chart($(id), {type, data, options: o});
+}
+
+function renderGraphiques() {
+  Chart.defaults.color = css("--mute"); Chart.defaults.borderColor = css("--line");
+  const n = Math.max(...resultats.map(r => r.mensualites.length));
+  const d0 = new Date(scenarios[0].p.date_achat);
+  const labels = Array.from({length: n}, (_, i) =>
+    new Date(d0.getFullYear(), d0.getMonth() + i + 1, 1).toLocaleDateString("fr-FR", {month: "short", year: "numeric"}));
+  const ligne = (cle, stepped) => scenarios.map((s, i) => ({
+    label: s.nom, data: resultats[i][cle], borderColor: couleur(i), backgroundColor: couleur(i),
+    borderWidth: 2, pointRadius: 0, stepped, fill: false}));
+  const axes = {x: {ticks: {maxTicksLimit: 10}}, y: {ticks: {callback: v => eur(v)}}};
+  const tip = d => ({plugins: {tooltip: {mode: "index", intersect: false, callbacks: {label: c => `${c.dataset.label} : ${eur(c.parsed.y, d)}`}}}, interaction: {mode: "index", intersect: false}});
+
+  upsert("c1", "line", {labels, datasets: [...ligne("mensualites", true), ligneBudget(n, scenarios[0].p.date_achat)]}, {scales: axes, ...tip(2)});
+  upsert("c2", "line", {labels, datasets: ligne("capital", false)}, {scales: axes, ...tip(0)});
+  upsert("c3", "bar", {labels: scenarios.map(s => s.nom), datasets: [
+    {label: "Intérêts", data: resultats.map(r => r.kpis.interets), backgroundColor: css("--mute")},
+    {label: "Assurance", data: resultats.map(r => r.kpis.assurance), backgroundColor: css("--s4")}]},
+    {scales: {x: {stacked: true}, y: {stacked: true, ticks: {callback: v => eur(v)}}},
+     plugins: {tooltip: {callbacks: {label: c => `${c.dataset.label} : ${eur(c.parsed.y)}`}}}});
+}
+
+function renderSplit() {
+  const r = resultats[actif]; if (!r) return;
+  $("split-titre").textContent = `Répartition de la mensualité – ${scenarios[actif].nom}`;
+  const d0 = new Date(scenarios[actif].p.date_achat);
+  const labels = r.mensualites.map((_, i) =>
+    new Date(d0.getFullYear(), d0.getMonth() + i + 1, 1).toLocaleDateString("fr-FR", {month: "short", year: "numeric"}));
+  const ds = (l, k, c) => ({label: l, data: r.detail[k], backgroundColor: css(c), borderWidth: 0, barPercentage: 1, categoryPercentage: 1});
+  upsert("c4", "bar", {labels, datasets: [ds("Prêt principal", "princ", "--s1"), ds("Action Logement", "al", "--s2"),
+      ds("PTZ", "ptz", "--s3"), ds("Intérêts", "interet", "--mute"), ds("Assurance", "ass", "--s4"),
+      {...ligneBudget(r.mensualites.length, scenarios[actif].p.date_achat), type: "line", order: 0}]},
+    {scales: {x: {stacked: true, ticks: {maxTicksLimit: 10}}, y: {stacked: true, ticks: {callback: v => eur(v)}}},
+     interaction: {mode: "index", intersect: false},
+     plugins: {tooltip: {mode: "index", intersect: false, callbacks: {
+       label: c => `${c.dataset.label} : ${eur(c.parsed.y, 2)}`,
+       footer: i => "Total : " + eur(i.filter(c => c.dataset.type !== "line").reduce((a, b) => a + b.parsed.y, 0), 2)}}}});
+}
+
+function periodesBudget(r, sp) {   // coupe les périodes à la date de fin du loyer
+  const cut = idxLoyer(sp.date_achat), n = r.mensualites.length, out = [];
+  r.periodes.forEach(s => {
+    const fin = s.debut + s.mois;
+    const parts = cut > s.debut && cut < fin ? [[s.debut, cut, s.label], [cut, fin, s.label + " (sans loyer)"]] : [[s.debut, fin, s.label]];
+    parts.forEach(([a, b, label]) => {
+      const m = r.mensualites.slice(a, b);
+      out.push({label, debut: a, mois: b - a, mini: Math.min(...m), maxi: Math.max(...m), restant: n - a, budget: budgetMois(a, sp.date_achat)});
+    });
+  });
+  return out;
+}
+
+function renderPeriodes() {
+  const r = resultats[actif]; if (!r) return;
+  const sp = scenarios[actif].p, P = periodesBudget(r, sp);
+  $("per-titre").textContent = `Mensualité réelle par période – ${scenarios[actif].nom}`;
+  $("frise").innerHTML = P.map(s => { const e = s.budget - s.maxi;
+    return `<div class="blk ${e >= 0 ? "ok" : "ko"}" style="flex:${Math.max(s.mois, 8)} 1 112px"><b>${eur(s.maxi)}</b><span>${s.label}</span><small>${duree(s.mois)} · marge ${signe(e, 0)}</small></div>`; }).join("");
+  $("periodes").innerHTML = "<tr><th>Période</th><th>Du</th><th>Au</th><th>Durée</th><th>Mensualité réelle</th><th>Durée restante du crédit</th><th>Budget</th><th>Marge</th></tr>" +
+    P.map(s => { const e = s.budget - s.maxi;
+      return `<tr><td>${s.label}</td><td>${moisLabel(sp.date_achat, s.debut)}</td><td>${moisLabel(sp.date_achat, s.debut + s.mois - 1)}</td>` +
+        `<td>${duree(s.mois)}</td><td>${plage(s.mini, s.maxi)}</td><td>${duree(s.restant)}</td><td>${eur(s.budget)}</td>` +
+        `<td class="${e >= 0 ? "ok" : "ko"}">${signe(e)}</td></tr>`; }).join("");
+}
+
+let vue = "an";
+document.querySelectorAll("[data-v]").forEach(b => b.onclick = () => { vue = b.dataset.v; renderAnnuel(); });
+
+function renderAnnuel() {
+  const r = resultats[actif]; if (!r) return;
+  const sp = scenarios[actif].p;
+  document.querySelectorAll("[data-v]").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === vue));
+  $("annuel-titre").textContent = `Synthèse ${vue === "an" ? "par année" : "par mois"} – ${scenarios[actif].nom}`;
+  const ec = (v, b) => `<td class="${b - v >= 0 ? "ok" : "ko"}">${signe(b - v)}</td>`;
+  if (vue === "an") {
+    let pos = 0;
+    $("annuel").innerHTML = "<tr><th>Année</th><th>Mois</th><th>Mensualité moy.</th><th>Min – max</th><th>Intérêts</th><th>Assurance</th><th>Total payé</th><th>Marge moy./mois</th><th>Capital restant fin d'année</th></tr>" +
+      r.annuel.map(a => {
+        const deb = pos; pos += a.mois;
+        const bm = Array.from({length: a.mois}, (_, k) => budgetMois(deb + k, sp.date_achat)).reduce((x, y) => x + y, 0) / a.mois;
+        return `<tr><td>${a.annee}</td><td>${a.mois}</td><td>${eur(a.mensualite_moy, 2)}</td><td>${plage(a.mini, a.maxi)}</td><td>${eur(a.interets)}</td><td>${eur(a.assurance)}</td><td>${eur(a.total)}</td>${ec(a.mensualite_moy, bm)}<td>${eur(a.capital_fin)}</td></tr>`; }).join("");
+  } else {
+    const d = r.detail;
+    $("annuel").innerHTML = "<tr><th>Mois</th><th>Prêt principal</th><th>Act. Logement</th><th>PTZ</th><th>Intérêts</th><th>Assurance</th><th>Mensualité réelle</th><th>Marge</th><th>Capital restant</th></tr>" +
+      r.mensualites.map((t, i) => `<tr><td>${moisLabel(sp.date_achat, i)}</td><td>${eur(d.princ[i], 2)}</td><td>${eur(d.al[i], 2)}</td><td>${eur(d.ptz[i], 2)}</td><td>${eur(d.interet[i], 2)}</td><td>${eur(d.ass[i], 2)}</td><td><b>${eur(t, 2)}</b></td>${ec(t, budgetMois(i, sp.date_achat))}<td>${eur(r.capital[i])}</td></tr>`).join("");
+  }
+}
+
+function renderActif() { renderSplit(); renderPeriodes(); renderAnnuel(); }
+
+function majBudget() {
+  const fin = new Date(budget.finLoyer).toLocaleDateString("fr-FR", {month: "long", year: "numeric"});
+  $("budget-total").innerHTML = `Budget disponible <strong>${eur(budget.epargne)}</strong> / mois, puis <strong>${eur(budget.epargne + budget.loyer)}</strong> dès ${fin}`;
+}
+["epargne", "loyer", "finLoyer"].forEach(k => {
+  const el = $(k.toLowerCase()); el.value = budget[k];
+  el.addEventListener("input", e => { budget[k] = k === "finLoyer" ? (e.target.value || budget.finLoyer) : (parseFloat(e.target.value) || 0); majBudget(); render(); });
+});
+majBudget();
+
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => resultats.length && (renderOnglets(), render()));
+tout();
+</script>
+</body>
+</html>

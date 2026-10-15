@@ -1,0 +1,28 @@
+COMPARATEUR DE SCÉNARIOS DE PRÊT VEFA
+=====================================
+
+Lancer sur Mac
+1. Dézippez le dossier.
+2. Double-cliquez sur « lancer.command ».
+   - Si macOS refuse de l'ouvrir : clic droit sur le fichier > Ouvrir > Ouvrir.
+   - Si le fichier ne s'exécute pas : dans le Terminal, tapez  chmod +x lancer.command
+   - Si Python 3 manque : installez-le depuis https://www.python.org/downloads/
+3. Le navigateur s'ouvre sur http://127.0.0.1:5050
+   (le port 5000 est volontairement évité : il est occupé par « Récepteur AirPlay » sur les Mac récents).
+
+Lancer à la main
+   cd dashboard_vefa
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   python app.py
+
+Contenu
+   app.py                 serveur Flask et moteur de calcul
+   templates/, static/    pages HTML et CSS, interface (app.js)
+   templates/limites.html page « Limites du modèle et pistes d'amélioration »
+   tests/                 vérifications du calcul (python3 -m unittest discover -s tests -v ; python3 tests/parite_js.py)
+   dashboard_autonome.html  version sans serveur (calcul en JavaScript), à ouvrir dans un navigateur
+   build_html.py          régénère la version autonome :  python3 build_html.py dashboard_autonome.html
+
+Internet est nécessaire pour les graphiques (Chart.js) et les polices.
+Simulation indicative, à valider avec votre banque.

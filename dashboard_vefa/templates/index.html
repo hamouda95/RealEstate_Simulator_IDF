@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparateur de scénarios – prêt VEFA</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Comparateur de scénarios<br>de prêt immobilier en VEFA</h1>
+    <div class="bar"></div>
+    <p class="sub">Créez jusqu'à 4 scénarios, ajustez les paramètres et comparez la mensualité réelle, période par période, à ce que votre budget peut absorber.</p>
+    <div class="nav-links">
+      <a href="{{ url_for('eligibilite') }}" class="lien">Test d'éligibilité aux aides</a>
+      <a href="{{ url_for('analyse') }}" class="lien">Analyse de bien</a>
+      {% if lien_limites %}<a href="{{ url_for('limites') }}" class="lien">Limites du modèle</a>{% endif %}
+    </div>
+  </header>
+  <div class="card budget">
+    <div class="f"><label for="epargne">Épargne mensuelle (€)</label><input type="number" id="epargne" min="0" step="10"></div>
+    <div class="f"><label for="loyer">Loyer mensuel (€)</label><input type="number" id="loyer" min="0" step="10"></div>
+    <div class="f"><label for="finloyer">Plus de loyer à partir de</label><input type="date" id="finloyer"></div>
+    <div class="bt" id="budget-total"></div>
+  </div>
+  <nav class="tabs" id="tabs" aria-label="Scénarios"></nav>
+
+  <div class="layout">
+    <aside class="panel">
+      <div class="f nom"><label for="nom">Nom du scénario</label><input type="text" id="nom"></div>
+      {% for titre, champs in groupes %}
+      <h2>{{ titre }}</h2>
+      {% for c in champs %}
+        {% if c.type == "date" %}
+        <div class="f"><label for="{{ c.id }}">{{ c.label }}</label>
+          <input type="date" id="{{ c.id }}" data-k="{{ c.id }}"></div>
+        {% elif c.type == "select" %}
+        <div class="f full"><label for="{{ c.id }}">{{ c.label }}</label>
+          <select id="{{ c.id }}" data-k="{{ c.id }}">
+            {% for val, txt in c.options %}<option value="{{ val }}">{{ txt }}</option>{% endfor %}
+          </select></div>
+        {% else %}
+        <div class="f"><label for="{{ c.id }}">{{ c.label }} ({{ c.unit }})</label>
+          <input type="number" id="{{ c.id }}" data-k="{{ c.id }}" min="{{ c.min }}" max="{{ c.max * 10 }}" step="{{ c.step }}">
+          <input type="range" data-k="{{ c.id }}" min="{{ c.min }}" max="{{ c.max }}" step="{{ c.step }}" aria-label="{{ c.label }}"></div>
+        {% endif %}
+      {% endfor %}
+      {% endfor %}
+      <div class="actions">
+        <button id="dup">Dupliquer</button>
+        <button id="del">Supprimer</button>
+        <button id="reset">Réinitialiser</button>
+      </div>
+    </aside>
+
+    <section class="results">
+      <div id="alertes"></div>
+      <div class="card"><h2>Comparaison</h2><div class="scroll"><table id="cmp"></table></div></div>
+      <div class="card"><h2>Mensualité mois par mois</h2><div class="cv"><canvas id="c1"></canvas></div></div>
+      <div class="card"><h2 id="per-titre">Mensualité réelle par période</h2><div class="frise" id="frise"></div>
+        <div class="scroll"><table id="periodes"></table></div></div>
+      <div class="card"><h2 id="split-titre">Répartition de la mensualité</h2><div class="cv"><canvas id="c4"></canvas></div></div>
+      <div class="card"><h2>Capital restant dû</h2><div class="cv"><canvas id="c2"></canvas></div></div>
+      <div class="card"><h2>Coût du crédit</h2><div class="cv short"><canvas id="c3"></canvas></div></div>
+      <div class="card"><div class="head"><h2 id="annuel-titre">Synthèse par année</h2>
+        <div class="seg"><button data-v="an" aria-pressed="true">Par an</button><button data-v="mois" aria-pressed="false">Par mois</button></div></div>
+        <div class="scroll tall"><table id="annuel"></table></div></div>
+      <p class="note">Hypothèses : pendant le chantier, seuls les intérêts et l'assurance sur les fonds débloqués sont payés. L'assurance porte sur le capital initial (PTZ inclus). Après livraison, chaque prêt est amorti à mensualité constante. Simulation indicative, à valider avec votre banque.</p>
+    </section>
+  </div>
+</main>
+<script>const DEFAULTS = {{ defaults | tojson }};</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -6,7 +6,7 @@
 """
 import os, random, sys, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from app import DEFAULTS, APPELS_VEFA, nettoyer, pmt, simuler, synthese, mois_entre
+from app import app, DEFAULTS, APPELS_VEFA, nettoyer, pmt, simuler, synthese, mois_entre
 
 TOL = 0.011
 
@@ -133,6 +133,38 @@ class CasLimites(unittest.TestCase):
     def test_alertes(self):
         self.assertTrue(synthese(nettoyer({**DEFAULTS, "apport": 400000}))["alertes"])
         self.assertTrue(synthese(nettoyer({**DEFAULTS, "ptz_dif": 10, "ptz_dur": 8}))["alertes"])
+
+
+class Api(unittest.TestCase):
+    def setUp(self):
+        self.c = app.test_client()
+
+    def test_eligibilite(self):
+        r = self.c.post("/api/eligibilite", json=dict(revenu_fiscal=30000, nb_personnes=2, zone="A",
+                                                     type_logement="vefa", prix=300000, salarie=True))
+        self.assertEqual(r.status_code, 200)
+        d = r.get_json()
+        self.assertTrue(d["PTZ"]["eligible"])
+        self.assertEqual(d["PTZ"]["tranche"], 1)
+        self.assertFalse(self.c.post("/api/eligibilite", json=dict(zone="C", type_logement="vefa", prix=200000))
+                         .get_json()["PTZ"]["eligible"])
+        self.assertEqual(self.c.post("/api/eligibilite", json=dict(revenu_fiscal="x", nb_personnes="2")).status_code, 200)
+
+    def test_zone(self):
+        z = lambda cp: self.c.post("/api/zone", json=dict(code_postal=cp)).get_json()["zone"]
+        self.assertEqual(z("75116"), "Abis")
+        self.assertEqual(z("94220"), "Abis")
+        self.assertEqual(z("78000"), "A")
+        self.assertEqual(self.c.post("/api/zone", json=dict(code_postal=12345)).status_code, 200)
+
+    def test_entrees_invalides(self):
+        for corps in ([1], {"scenarios": "x"}, {"scenarios": [1, {"date_achat": 5}]}):
+            self.assertEqual(self.c.post("/api/simulate", json=corps).status_code, 200, corps)
+        self.assertFalse(self.c.post("/api/poi", json=dict(lat="1];out;", lon=2)).get_json()["success"])
+
+    def test_location_achat(self):
+        d = self.c.post("/api/comparer", json=dict(apport=50000)).get_json()
+        self.assertGreater(d["location"][0]["patrimoine_net"], 50000)
 
 
 if __name__ == "__main__":

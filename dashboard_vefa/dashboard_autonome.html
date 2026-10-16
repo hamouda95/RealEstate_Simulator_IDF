@@ -238,6 +238,55 @@ code{background:var(--bg);padding:2px 8px;border-radius:6px;font-size:12.5px}
         
       
       
+      <h2>Frais d&#39;acquisition et de crédit</h2>
+      
+        
+        <div class="f full"><label for="etat">Type de bien (frais de notaire)</label>
+          <select id="etat" data-k="etat">
+            <option value="neuf">Neuf / VEFA (TVA 20 %)</option><option value="ancien">Ancien</option>
+          </select></div>
+        
+      
+        
+        <div class="f"><label for="frais_dossier">Frais de dossier bancaire (€)</label>
+          <input type="number" id="frais_dossier" data-k="frais_dossier" min="0" max="50000" step="50">
+          <input type="range" data-k="frais_dossier" min="0" max="5000" step="50" aria-label="Frais de dossier bancaire"></div>
+        
+      
+        
+        <div class="f"><label for="garantie">Garantie (caution ou hypothèque) (%)</label>
+          <input type="number" id="garantie" data-k="garantie" min="0" max="30" step="0.05">
+          <input type="range" data-k="garantie" min="0" max="3" step="0.05" aria-label="Garantie (caution ou hypothèque)"></div>
+        
+      
+        
+        <div class="f"><label for="courtage">Frais de courtage (€)</label>
+          <input type="number" id="courtage" data-k="courtage" min="0" max="100000" step="100">
+          <input type="range" data-k="courtage" min="0" max="10000" step="100" aria-label="Frais de courtage"></div>
+        
+      
+      
+      <h2>Taxe foncière (après livraison)</h2>
+      
+        
+        <div class="f"><label for="tf">Taxe foncière bâtie, année pleine (€)</label>
+          <input type="number" id="tf" data-k="tf" min="0" max="100000" step="10">
+          <input type="range" data-k="tf" min="0" max="10000" step="10" aria-label="Taxe foncière bâtie, année pleine"></div>
+        
+      
+        
+        <div class="f"><label for="teom">Taxe d&#39;ordures ménagères (TEOM) (€)</label>
+          <input type="number" id="teom" data-k="teom" min="0" max="30000" step="10">
+          <input type="range" data-k="teom" min="0" max="3000" step="10" aria-label="Taxe d&#39;ordures ménagères (TEOM)"></div>
+        
+      
+        
+        <div class="f"><label for="tf_exo">Exonération neuf les 2 premières années (%)</label>
+          <input type="number" id="tf_exo" data-k="tf_exo" min="0" max="1000" step="10">
+          <input type="range" data-k="tf_exo" min="0" max="100" step="10" aria-label="Exonération neuf les 2 premières années"></div>
+        
+      
+      
       <div class="actions">
         <button id="dup">Dupliquer</button>
         <button id="del">Supprimer</button>
@@ -257,13 +306,37 @@ code{background:var(--bg);padding:2px 8px;border-radius:6px;font-size:12.5px}
       <div class="card"><div class="head"><h2 id="annuel-titre">Synthèse par année</h2>
         <div class="seg"><button data-v="an" aria-pressed="true">Par an</button><button data-v="mois" aria-pressed="false">Par mois</button></div></div>
         <div class="scroll tall"><table id="annuel"></table></div></div>
-      <p class="note">Hypothèses : pendant le chantier, seuls les intérêts et l'assurance sur les fonds débloqués sont payés. L'assurance porte sur le capital initial (PTZ inclus). Après livraison, chaque prêt est amorti à mensualité constante. Simulation indicative, à valider avec votre banque.</p>
+      <p class="note">Hypothèses : pendant le chantier, seuls les intérêts et l'assurance sur les fonds débloqués sont payés. L'assurance porte sur le capital initial (PTZ inclus). Après livraison, chaque prêt est amorti à mensualité constante. Les frais (notaire, dossier, garantie, courtage) sont payés à la signature, d'abord par l'apport ; le reste éventuel est ajouté au prêt principal. Frais de notaire : barème officiel des émoluments (TVA 20 %), taxe de publicité foncière 0,715 % du prix HT en VEFA ou droits de mutation 5,80665 % dans l'ancien (taux de droit commun, certains départements appliquent 6,31 % hors primo-accédants), contribution de sécurité immobilière 0,10 % et 1 200 € de débours estimés. La garantie est un pourcentage du prêt principal et du PTZ ; frais de dossier, garantie et assurance dépendent de votre banque : reprenez les chiffres de votre offre. Taxe foncière : saisissez le montant de l'avis d'imposition ou du promoteur, ou estimez-le avec les taux de la commune dans « Analyse quartier ». Elle est due à partir du 1<sup>er</sup> janvier suivant la livraison, hors revalorisation annuelle des bases. Le TAEG est calculé sur l'ensemble des prêts, de façon actuarielle. Les formules sont exactes pour les données saisies ; simulation à valider avec votre banque et votre notaire.</p>
     </section>
   </div>
 </main>
-<script>const DEFAULTS = {"al": 30000, "apport": 50000, "ass": 0.25, "date_achat": "2027-01-01", "date_liv": "2029-07-01", "duree": 18, "duree_al": 18, "fonds": "vefa", "prix": 302000, "ptz": 54000, "ptz_dif": 0, "ptz_dur": 10, "taux": 4.0, "taux_al": 1.0};</script>
+<script>const DEFAULTS = {"al": 30000, "apport": 50000, "ass": 0.25, "courtage": 0, "date_achat": "2027-01-01", "date_liv": "2029-07-01", "duree": 18, "duree_al": 18, "etat": "neuf", "fonds": "vefa", "frais_dossier": 1000, "garantie": 1.0, "prix": 302000, "ptz": 54000, "ptz_dif": 0, "ptz_dur": 10, "taux": 4.0, "taux_al": 1.0, "teom": 120, "tf": 900, "tf_exo": 40};</script>
 <script>const APPELS=[[0,.05],[3,.35],[9,.70],[18,.95]];
 const pmt=(c,r,n)=>c<=0||n<=0?0:(r===0?c/n:c*r/(1-Math.pow(1+r,-n)));
+const TVA=.2,BAREME=[[6500,.0387],[17000,.01596],[60000,.01064],[Infinity,.00799]],DROITS={neuf:.00715,ancien:.0580665};
+function emoluments(b){let t=0,lo=0;for(const[hi,tx]of BAREME){if(b>lo)t+=(Math.min(b,hi)-lo)*tx;lo=hi}return t}
+function fraisNotaire(prix,etat){
+ if(prix<=0)return{emoluments:0,tva:0,droits:0,csi:0,debours:0,total:0};
+ const base=etat==="neuf"?prix/(1+TVA):prix,em=emoluments(base);
+ const d={emoluments:em,tva:em*TVA,droits:base*DROITS[etat],csi:Math.max(15,prix*.001),debours:1200};
+ d.total=d.emoluments+d.tva+d.droits+d.csi+d.debours;return d}
+function fraisInitiaux(p){
+ const notaire=fraisNotaire(p.prix,p.etat).total,g=p.garantie/100;
+ const b=p.prix+notaire+p.frais_dossier+p.courtage-p.apport-p.al,garantie=b>0?g*b/(1-g):0;
+ return{notaire,dossier:p.frais_dossier,garantie,courtage:p.courtage,total:notaire+p.frais_dossier+garantie+p.courtage}}
+function taeg(rows,nb,total,fc){
+ if(total<=0)return 0;
+ const flux=new Array(rows.length+1).fill(0);let deja=0;
+ for(let m=1;m<=nb;m++){const x=rows[m-1],deb=x.balP+x.balAl+x.balPtz;flux[m-1]+=deb-deja;deja=deb}
+ flux[nb]+=total-deja;flux[0]-=fc;rows.forEach((x,j)=>flux[j+1]-=x.total);
+ const van=i=>{let v=0,f=1;for(const c of flux){v+=c*f;f/=1+i}return v};
+ let lo=-.0099,hi=.05;if(van(lo)>0||van(hi)<0)return null;
+ for(let k=0;k<80;k++){const mi=(lo+hi)/2;if(van(mi)<0)lo=mi;else hi=mi}
+ return(Math.pow(1+(lo+hi)/2,12)-1)*100}
+function taxeFonciereAnnee(p,an){
+ const yl=Number((p.etat==="neuf"?p.date_liv:p.date_achat).slice(0,4));
+ if(an<=yl)return 0;
+ const exo=p.etat==="neuf"&&an<=yl+2?p.tf_exo/100:0;return p.tf*(1-exo)+p.teom}
 const moisEntre=(a,b)=>{const[x,y]=a.split("-").map(Number),[u,v]=b.split("-").map(Number);return (u-x)*12+(v-y)};
 function libelle(k,p){
  if(k===1)return "Livraison : début des remboursements";
@@ -287,7 +360,7 @@ function periodes(rows,nb,p){
 }
 function synthese(p){
  const nb=Math.max(0,moisEntre(p.date_achat,p.date_liv));
- const princ=p.prix-p.apport-p.ptz-p.al, total=princ+p.ptz+p.al;
+ const fi=fraisInitiaux(p),frais=fi.total,princ=p.prix+frais-p.apport-p.ptz-p.al,total=princ+p.ptz+p.al;
  const r=p.taux/1200,rAl=p.taux_al/1200,ia=p.ass/1200;
  const mP=pmt(princ,r,p.duree*12),mAl=pmt(p.al,rAl,p.duree_al*12);
  const mZ=p.ptz/Math.max(1,(p.ptz_dur-p.ptz_dif)*12);
@@ -296,7 +369,7 @@ function synthese(p){
   let pct=0;
   if(p.fonds==="tout")pct=1;else if(p.fonds==="lin")pct=m/nb;
   else APPELS.forEach(([k,v])=>{if(k<m)pct=v});
-  const deb=Math.min(Math.max(p.prix*pct-p.apport,0),total),part=total>0?deb/total:0;
+  const deb=Math.min(Math.max(p.prix*pct+frais-p.apport,0),total),part=total>0?deb/total:0;
   rows.push({m,phase:1,interet:princ*part*r+p.al*part*rAl,princ:0,al:0,ptz:0,ass:deb*ia,balP:princ*part,balAl:p.al*part,balPtz:p.ptz*part});
  }
  const hor=Math.round(Math.max(p.duree,p.duree_al,p.ptz_dur)*12),fin=Math.max(p.duree,p.duree_al)*12;
@@ -317,17 +390,24 @@ function synthese(p){
  const alertes=[];
  if(princ<0)alertes.push("L'apport et les aides dépassent le prix : le prêt principal est négatif.");
  if(p.ptz_dur<=p.ptz_dif)alertes.push("La durée totale du PTZ doit dépasser le différé.");
+ const n0=x=>Math.round(x).toLocaleString("en-US").replace(/,/g," ");
+ if(princ>=0&&p.apport<fi.total)alertes.push(`L'apport ne couvre pas les frais (${n0(fi.total)} €) : ${n0(fi.total-p.apport)} € sont financés par le prêt, ce que beaucoup de banques refusent.`);
+ if(p.ptz>Math.max(princ,0)+p.al)alertes.push("Le PTZ ne peut pas dépasser le montant des autres prêts.");
+ if(p.date_liv<p.date_achat)alertes.push("La date de livraison est antérieure à la date d'achat.");
+ const tx=taeg(rows,nb,total,fi.dossier+fi.garantie+fi.courtage);
  while(rows.length&&rows[rows.length-1].total<=0.005)rows.pop();
  const [y0,m0]=p.date_achat.split("-").map(Number),an={};
  rows.forEach(x=>{const y=y0+Math.floor((m0-1+x.m)/12);(an[y]=an[y]||[]).push(x)});
  const f=ph2[0]||{},dt=k=>rows.map(x=>+x[k].toFixed(2));
  return{kpis:{mf_princ:f.princ||0,mf_al:f.al||0,mf_ptz:f.ptz||0,mf_interet:f.interet||0,mf_ass:f.ass||0,
   mensualite_finale:ph2.length?ph2[0].total:0,max_avant:Math.max(0,...rows.filter(x=>x.phase===1).map(x=>x.total)),apres_ptz:apres,
-  pret_principal:Math.max(princ,0),total_emprunte:total,interets,assurance,cout_credit:interets+assurance,total_rembourse:sum(rows,"total"),duree_mois:rows.length,mois_chantier:nb},
+  pret_principal:Math.max(princ,0),total_emprunte:total,interets,assurance,cout_credit:interets+assurance,total_rembourse:sum(rows,"total"),duree_mois:rows.length,mois_chantier:nb,
+  frais_notaire:fi.notaire,frais_dossier:fi.dossier,frais_garantie:fi.garantie,courtage:fi.courtage,frais_initiaux:fi.total,
+  cout_total:p.prix+fi.total+interets+assurance,taeg:tx,tf_pleine:p.tf+p.teom,mensualite_avec_tf:(ph2.length?ph2[0].total:0)+(p.tf+p.teom)/12},
   mensualites:dt("total"),capital:rows.map(x=>Math.round(x.bal)),
   detail:{princ:dt("princ"),al:dt("al"),ptz:dt("ptz"),interet:dt("interet"),ass:dt("ass")},
   periodes:periodes(rows,nb,p),
-  annuel:Object.entries(an).map(([y,a])=>({annee:y,mois:a.length,mensualite_moy:sum(a,"total")/a.length,mini:Math.min(...a.map(x=>x.total)),maxi:Math.max(...a.map(x=>x.total)),interets:sum(a,"interet"),assurance:sum(a,"ass"),total:sum(a,"total"),capital_fin:a[a.length-1].bal})),alertes};
+  annuel:Object.entries(an).map(([y,a])=>({annee:y,mois:a.length,mensualite_moy:sum(a,"total")/a.length,mini:Math.min(...a.map(x=>x.total)),maxi:Math.max(...a.map(x=>x.total)),interets:sum(a,"interet"),assurance:sum(a,"ass"),total:sum(a,"total"),taxe_fonciere:taxeFonciereAnnee(p,Number(y)),capital_fin:a[a.length-1].bal})),alertes};
 }
 const MAX_SCENARIOS = 4;
 const $ = id => document.getElementById(id);
@@ -335,7 +415,7 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 const eur = (x, d = 0) => x.toLocaleString("fr-FR", {style: "currency", currency: "EUR", minimumFractionDigits: d, maximumFractionDigits: d});
 const duree = m => { const a = Math.floor(m / 12), r = m % 12;
   return [a ? `${a} an${a > 1 ? "s" : ""}` : "", r ? `${r} mois` : ""].filter(Boolean).join(" ") || "0 mois"; };
-const fmt = (v, d) => d === "mois" ? duree(v) : eur(v, d);
+const fmt = (v, d) => v === null || v === undefined ? "–" : d === "mois" ? duree(v) : d === "pct" ? v.toLocaleString("fr-FR", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " %" : eur(v, d);
 const moisLabel = (date, i) => { const d0 = new Date(date);
   return new Date(d0.getFullYear(), d0.getMonth() + i + 1, 1).toLocaleDateString("fr-FR", {month: "short", year: "numeric"}); };
 const budget = {epargne: 1130, loyer: 2000, finLoyer: "2029-07-01"};
@@ -363,6 +443,15 @@ const LIGNES = [  // [libellé, clé du KPI, décimales, ligne mise en avant]
   ["Coût du crédit", "cout_credit", 0, "hl"],
   ["Total remboursé", "total_rembourse", 0],
   ["Durée totale du crédit", "duree_mois", "mois"],
+  ["TAEG global (tous prêts, assurance et frais inclus)", "taeg", "pct", "hl"],
+  ["Frais à la signature", "frais_initiaux", 0, "hl"],
+  ["dont frais de notaire (estimation)", "frais_notaire", 0, "sub"],
+  ["dont frais de dossier", "frais_dossier", 0, "sub"],
+  ["dont garantie", "frais_garantie", 0, "sub"],
+  ["dont courtage", "courtage", 0, "sub"],
+  ["Coût total (prix + frais + crédit)", "cout_total", 0, "hl"],
+  ["Taxe foncière + TEOM (année pleine)", "tf_pleine", 0],
+  ["Mensualité finale + taxe foncière / 12", "mensualite_avec_tf", 2],
 ];
 
 let scenarios = [{nom: "Scénario A", p: {...DEFAULTS}}];
@@ -542,11 +631,11 @@ function renderAnnuel() {
   const ec = (v, b) => `<td class="${b - v >= 0 ? "ok" : "ko"}">${signe(b - v)}</td>`;
   if (vue === "an") {
     let pos = 0;
-    $("annuel").innerHTML = "<tr><th>Année</th><th>Mois</th><th>Mensualité moy.</th><th>Min – max</th><th>Intérêts</th><th>Assurance</th><th>Total payé</th><th>Marge moy./mois</th><th>Capital restant fin d'année</th></tr>" +
+    $("annuel").innerHTML = "<tr><th>Année</th><th>Mois</th><th>Mensualité moy.</th><th>Min – max</th><th>Intérêts</th><th>Assurance</th><th>Total payé</th><th>Taxe foncière</th><th>Marge moy./mois</th><th>Capital restant fin d'année</th></tr>" +
       r.annuel.map(a => {
         const deb = pos; pos += a.mois;
         const bm = Array.from({length: a.mois}, (_, k) => budgetMois(deb + k, sp.date_achat)).reduce((x, y) => x + y, 0) / a.mois;
-        return `<tr><td>${a.annee}</td><td>${a.mois}</td><td>${eur(a.mensualite_moy, 2)}</td><td>${plage(a.mini, a.maxi)}</td><td>${eur(a.interets)}</td><td>${eur(a.assurance)}</td><td>${eur(a.total)}</td>${ec(a.mensualite_moy, bm)}<td>${eur(a.capital_fin)}</td></tr>`; }).join("");
+        return `<tr><td>${a.annee}</td><td>${a.mois}</td><td>${eur(a.mensualite_moy, 2)}</td><td>${plage(a.mini, a.maxi)}</td><td>${eur(a.interets)}</td><td>${eur(a.assurance)}</td><td>${eur(a.total)}</td><td>${eur(a.taxe_fonciere || 0)}</td>${ec(a.mensualite_moy, bm)}<td>${eur(a.capital_fin)}</td></tr>`; }).join("");
   } else {
     const d = r.detail;
     $("annuel").innerHTML = "<tr><th>Mois</th><th>Prêt principal</th><th>Act. Logement</th><th>PTZ</th><th>Intérêts</th><th>Assurance</th><th>Mensualité réelle</th><th>Marge</th><th>Capital restant</th></tr>" +

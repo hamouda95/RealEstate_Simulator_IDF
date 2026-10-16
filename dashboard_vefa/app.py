@@ -3,7 +3,9 @@
 Lancer :  pip install -r requirements.txt && python app.py
 Ouvrir :  http://127.0.0.1:5050
 """
+import json
 import math
+import os
 
 from flask import Flask, jsonify, render_template, request
 import requests
@@ -13,32 +15,38 @@ app = Flask(__name__)
 # Appels de fonds VEFA standard : (mois écoulé après lequel le palier s'applique, % du prix appelé)
 APPELS_VEFA = [(0, 0.05), (3, 0.35), (9, 0.70), (18, 0.95)]
 
-# ---------------------------------------------------------------- données officielles aides 2024
-# Plafonds de ressources PTZ 2024 (revenu fiscal de référence N-2)
+# ---------------------------------------------------------------- données officielles
+# PTZ – offres de prêt émises depuis avril 2025 (service-public.fr F10871, vérifié le 15/09/2026).
+SOURCE_PTZ = "service-public.fr – Prêt à taux zéro, offres émises depuis avril 2025 (vérifié le 15/09/2026)"
+ZONES_PTZ = {"Abis": "A", "A": "A", "B1": "B1", "B2": "B2", "C": "C"}  # A et A bis partagent le barème
+# Plafonds de ressources (revenu pris en compte) selon la zone et le nombre d'occupants (8 et +)
 PLAFONDS_PTZ = {
-    "A": {1: 49000, 2: 73500, 3: 88200, 4: 102900, 5: 117600, 6: 132300, 7: 147000, 8: 161700},
-    "Abis": {1: 49000, 2: 73500, 3: 88200, 4: 102900, 5: 117600, 6: 132300, 7: 147000, 8: 161700},
-    "B1": {1: 34500, 2: 51750, 3: 62100, 4: 72450, 5: 82800, 6: 93150, 7: 103500, 8: 113850},
-    "B2": {1: 31500, 2: 47250, 3: 56700, 4: 66150, 5: 75600, 6: 85050, 7: 94500, 8: 103950},
-    "C": {1: 28500, 2: 42750, 3: 51300, 4: 59850, 5: 68400, 6: 76950, 7: 85500, 8: 94050},
+    "A": [49000, 73500, 88200, 102900, 117600, 132300, 147000, 161700],
+    "B1": [34500, 51750, 62100, 72450, 82800, 93150, 103500, 113850],
+    "B2": [31500, 47250, 56700, 66150, 75600, 85050, 94500, 103950],
+    "C": [28500, 42750, 51300, 59850, 68400, 76950, 85500, 94050],
 }
-
-# Tranches PTZ et quotité finançable (2024-2027)
-TRANCHES_PTZ = [
-    {"max_ratio": 0.5, "quotite": 0.50, "duree": 25},  # Tranche 1: 50% finançable, 25 ans
-    {"max_ratio": 0.7, "quotite": 0.40, "duree": 22},  # Tranche 2: 40% finançable, 22 ans
-    {"max_ratio": 0.9, "quotite": 0.30, "duree": 20},  # Tranche 3: 30% finançable, 20 ans
-    {"max_ratio": 1.0, "quotite": 0.20, "duree": 17},  # Tranche 4: 20% finançable, 17 ans
-]
-
-# Montants max PTZ selon type d'opération et zone (2024-2027)
-MONTANT_MAX_PTZ = {
-    "neuf_collectif": {"A": 360000, "Abis": 360000, "B1": 360000, "B2": 0, "C": 0},
-    "neuf_individuel": {"A": 360000, "Abis": 360000, "B1": 360000, "B2": 360000, "C": 360000},
-    "ancien_travaux": {"A": 0, "Abis": 0, "B1": 0, "B2": 360000, "C": 360000},
+# Bornes hautes des tranches 1 à 4 (revenu pris en compte ÷ coefficient familial)
+TRANCHES_PTZ = {
+    "A": [25000, 31000, 37000, 49000],
+    "B1": [21500, 26000, 30000, 34500],
+    "B2": [18000, 22500, 27000, 31500],
+    "C": [15000, 19500, 24000, 28500],
 }
+COEF_FAMILIAL = [1, 1.5, 1.8, 2.1, 2.4]  # 1, 2, 3, 4, 5 personnes et +
+# Coût maximal de l'opération pris en compte (1 à 5 personnes et +)
+COUT_MAX_PTZ = {
+    "A": [150000, 225000, 270000, 315000, 360000],
+    "B1": [135000, 202500, 243000, 283500, 324000],
+    "B2": [110000, 165000, 198000, 231000, 264000],
+    "C": [100000, 150000, 180000, 210000, 240000],
+}
+QUOTITE_PTZ = {"collectif": [0.50, 0.40, 0.40, 0.20], "individuel": [0.30, 0.20, 0.20, 0.10]}
+# Durée totale et différé par tranche (barème réglementaire, à confirmer dans l'offre de prêt)
+DUREE_PTZ = [(25, 15), (25, 10), (22, 5), (20, 0)]
 
-# Plafonds Action Logement 2024 (revenu fiscal de référence N-2)
+# Prêt Accession Action Logement (actionlogement.fr) : 30 000 € max, 1 % fixe, 25 ans max.
+SOURCE_AL = "actionlogement.fr – Prêt accession : 30 000 € max, taux fixe 1 % hors assurance, 25 ans max"
 PLAFONDS_AL = {
     "Abis": {1: 43475, 2: 64976, 3: 85175, 4: 101693, 5: 120995, 6: 136151, "sup": 15168},
     "A": {1: 43475, 2: 64976, 3: 78104, 4: 93556, 5: 110753, 6: 124630, "sup": 13886},
@@ -46,6 +54,7 @@ PLAFONDS_AL = {
     "B2": {1: 31892, 2: 42588, 3: 51215, 4: 61830, 5: 72735, 6: 81971, "sup": 9142},
     "C": {1: 31589, 2: 42186, 3: 50731, 4: 61243, 5: 72044, 6: 81192, "sup": 9063},
 }
+
 
 # ---------------------------------------------------------------- fonctions d'éligibilité aux aides
 def nombre(v, defaut):
@@ -57,142 +66,96 @@ def nombre(v, defaut):
     return x if math.isfinite(x) else defaut
 
 
-def determiner_tranche_ptz(revenu, plafond_zone):
-    """Détermine la tranche PTZ selon le revenu par rapport au plafond de zone."""
-    ratio = revenu / plafond_zone if plafond_zone > 0 else 1.0
-    for tranche in TRANCHES_PTZ:
-        if ratio <= tranche["max_ratio"]:
-            return tranche
-    return TRANCHES_PTZ[-1]
+def calculer_ptz(cout, type_operation, zone, revenu_fiscal, nb_personnes, apport=0.0):
+    """PTZ maximal selon les règles des offres émises depuis avril 2025."""
+    z = ZONES_PTZ.get(zone)
+    if z is None:
+        return {"eligible": False, "raison": f"Zone inconnue : {zone}"}
+    if cout <= 0:
+        return {"eligible": False, "raison": "Indiquez le coût total de l'opération"}
+    if type_operation == "ancien" and z not in ("B2", "C"):
+        return {"eligible": False, "raison": "Dans l'ancien, le PTZ n'est possible qu'en zone B2 ou C (avec travaux)"}
+    n = max(1, int(nb_personnes))
+    revenu_retenu = max(revenu_fiscal, cout / 9)
+    plafond = PLAFONDS_PTZ[z][min(n, 8) - 1]
+    base = {"zone": zone, "revenu_retenu": round(revenu_retenu), "plafond_zone": plafond, "source": SOURCE_PTZ}
+    if revenu_retenu > plafond:
+        return {**base, "eligible": False,
+                "raison": f"Revenu pris en compte {round(revenu_retenu):,} € > plafond {plafond:,} € "
+                          f"(le revenu retenu est au moins égal au coût de l'opération ÷ 9)".replace(",", " ")}
+    coef = COEF_FAMILIAL[min(n, 5) - 1]
+    quotient = revenu_retenu / coef
+    tranche = next(i for i, borne in enumerate(TRANCHES_PTZ[z]) if quotient <= borne) + 1
+    collectif = "collectif" if type_operation == "vefa" else "individuel"
+    quotite = QUOTITE_PTZ[collectif][tranche - 1]
+    cout_retenu = min(cout, COUT_MAX_PTZ[z][min(n, 5) - 1])
+    montant = cout_retenu * quotite
+    # Le PTZ ne peut pas dépasser les autres prêts (> 2 ans), ou 1,25 fois ceux-ci en tranche 1.
+    besoin = max(cout - apport, 0)
+    ratio = 1.25 if tranche == 1 else 1.0
+    montant = min(montant, besoin * ratio / (1 + ratio))
+    duree, differe = DUREE_PTZ[tranche - 1]
+    return {**base, "eligible": True, "montant_max": int(montant), "quotite": round(quotite * 100),
+            "tranche": tranche, "duree_max": duree, "differe": differe, "cout_retenu": cout_retenu,
+            "coef_familial": coef, "ratio_revenu": round(revenu_retenu / plafond, 2),
+            "logement": "bâtiment collectif" if collectif == "collectif" else "maison individuelle"}
 
-def calculer_montant_ptz_max(prix, type_operation, zone, revenu, nb_personnes):
-    """Calcule le montant maximal de PTZ éligible selon les règles 2024-2027."""
-    # Déterminer le type d'opération pour le PTZ
-    if type_operation == "vefa":
-        type_ptz = "neuf_collectif"
-    elif type_operation == "neuf":
-        type_ptz = "neuf_individuel"
-    elif type_operation == "ancien":
-        type_ptz = "ancien_travaux"
-    else:
-        type_ptz = "neuf_individuel"
-
-    # Vérifier éligibilité zone selon type d'opération
-    montant_max_zone = MONTANT_MAX_PTZ.get(type_ptz, {}).get(zone, 0)
-    if montant_max_zone == 0:
-        return {"eligible": False, "raison": f"Type {type_operation} non éligible en zone {zone}"}
-
-    # Récupérer plafond selon zone et nombre de personnes
-    plafond = PLAFONDS_PTZ.get(zone, {}).get(min(nb_personnes, 8), 0)
-    if revenu > plafond:
-        return {"eligible": False, "raison": f"Revenu {revenu}€ dépasse le plafond {plafond}€"}
-
-    # Déterminer tranche et quotité
-    tranche = determiner_tranche_ptz(revenu, plafond)
-    quotite = tranche["quotite"]
-    duree_max = tranche["duree"]
-
-    # Calculer montant selon quotité
-    montant_quotite = prix * quotite
-
-    # Appliquer le montant max selon zone
-    montant_final = min(montant_quotite, montant_max_zone)
-
-    # Arrondir à l'euro inférieur
-    montant_final = int(montant_final)
-
-    return {
-        "eligible": True,
-        "montant_max": montant_final,
-        "quotite": int(quotite * 100),
-        "duree_max": duree_max,
-        "tranche": TRANCHES_PTZ.index(tranche) + 1,
-        "plafond_zone": plafond,
-        "ratio_revenu": round(revenu / plafond, 2),
-    }
 
 def verifier_eligibilite_al(revenu, zone, nb_personnes, salarie):
     """Vérifie l'éligibilité au prêt Action Logement."""
     if not salarie:
-        return False, "Non salarié d'entreprise éligible"
-
+        return False, "Réservé aux salariés d'une entreprise privée non agricole de 10 salariés et plus"
     plafond = PLAFONDS_AL.get(zone, {}).get(min(nb_personnes, 6), 0)
     if nb_personnes > 6:
         plafond += PLAFONDS_AL.get(zone, {}).get("sup", 0) * (nb_personnes - 6)
-
     if revenu > plafond:
-        return False, f"Revenu {revenu}€ dépasse le plafond {plafond}€"
-
+        return False, f"Revenu {revenu:,.0f} € > plafond {plafond:,} €".replace(",", " ")
     return True, "Éligible"
 
-def calculer_montant_al_max(cout_operation):
-    """Calcule le montant maximal du prêt Action Logement."""
-    return min(30000, int(cout_operation * 0.4))
 
 def eligibilite_aides(params):
     """Calcule l'éligibilité à toutes les aides selon les paramètres."""
-    revenu = nombre(params.get("revenu_fiscal"), 0)
-    nb_personnes = max(1, int(nombre(params.get("nb_personnes"), 1)))
+    revenu = max(0.0, nombre(params.get("revenu_fiscal"), 0))
+    nb_personnes = min(20, max(1, int(nombre(params.get("nb_personnes"), 1))))
     zone = params.get("zone", "B1")
-    if zone not in PLAFONDS_PTZ:
+    if zone not in ZONES_PTZ:
         zone = "B1"
-    type_logement = params.get("type_logement", "neuf")  # neuf, ancien, vefa
+    type_logement = params.get("type_logement", "vefa")  # vefa (collectif), neuf (maison), ancien
+    if type_logement not in ("vefa", "neuf", "ancien"):
+        type_logement = "vefa"
     salarie = bool(params.get("salarie", False))
-    prix = nombre(params.get("prix"), 0)
+    prix = max(0.0, nombre(params.get("prix"), 0))
+    apport = max(0.0, nombre(params.get("apport"), 0))
 
     aides = {}
+    ptz = calculer_ptz(prix, type_logement, zone, revenu, nb_personnes, apport)
+    if ptz["eligible"] and type_logement == "ancien":
+        ptz["condition"] = "Travaux d'amélioration d'au moins 25 % du coût total de l'opération"
+    aides["PTZ"] = ptz
 
-    # PTZ
-    resultat_ptz = calculer_montant_ptz_max(prix, type_logement, zone, revenu, nb_personnes)
-    if resultat_ptz["eligible"]:
-        aides["PTZ"] = {
-            "eligible": True,
-            "montant_max": resultat_ptz["montant_max"],
-            "quotite": resultat_ptz["quotite"],
-            "duree_max": resultat_ptz["duree_max"],
-            "tranche": resultat_ptz["tranche"],
-            "zone": zone,
-            "plafond_zone": resultat_ptz["plafond_zone"],
-            "ratio_revenu": resultat_ptz["ratio_revenu"],
-        }
-        if type_logement == "ancien":
-            aides["PTZ"]["condition"] = "Avec travaux énergétiques (min 25% du coût)"
-    else:
-        aides["PTZ"] = {"eligible": False, "raison": resultat_ptz["raison"]}
-
-    # Action Logement
     eligible_al, raison_al = verifier_eligibilite_al(revenu, zone, nb_personnes, salarie)
     if eligible_al:
-        montant_al = calculer_montant_al_max(prix)
-        aides["Action Logement"] = {
-            "eligible": True,
-            "montant_max": montant_al,
-            "taux": 1.0,
-            "duree_max": 25,
-        }
+        aides["Action Logement"] = {"eligible": True, "montant_max": int(min(30000, prix)), "taux": 1.0,
+                                    "duree_max": 25, "condition": "Primo-accédant, résidence principale",
+                                    "source": SOURCE_AL}
     else:
         aides["Action Logement"] = {"eligible": False, "raison": raison_al}
 
-    # PAS (Prêt d'Accession Sociale) - simplifié
-    # Plafonds PAS similaires à PTZ mais plus bas
-    plafond_pas = PLAFONDS_PTZ.get(zone, {}).get(min(nb_personnes, 8), 0) * 0.9
+    # PAS : mêmes plafonds de ressources que le PTZ (revenu fiscal de référence N-2).
+    plafond_pas = PLAFONDS_PTZ[ZONES_PTZ[zone]][min(nb_personnes, 8) - 1]
     if revenu <= plafond_pas:
-        aides["PAS"] = {
-            "eligible": True,
-            "avantages": ["Financement à 100% possible", "Durée 5-30 ans", "Réduction frais notaire"],
-        }
+        aides["PAS"] = {"eligible": True, "condition": f"Revenu ≤ {plafond_pas:,} €".replace(",", " "),
+                        "avantages": ["Frais de dossier plafonnés", "Ouvre droit aux APL accession",
+                                      "Proposé par les banques conventionnées"]}
     else:
-        aides["PAS"] = {"eligible": False, "raison": "Revenu trop élevé"}
+        aides["PAS"] = {"eligible": False, "raison": f"Revenu > {plafond_pas:,} €".replace(",", " ")}
 
-    # PSLA (Location-Accession)
-    if type_logement in ["neuf", "vefa"]:
-        aides["PSLA"] = {
-            "eligible": True,
-            "avantages": ["TVA réduite (5.5%)", "Exonération taxe foncière 15 ans", "Minoration prix 1%/an"],
-        }
+    if type_logement in ("neuf", "vefa"):
+        aides["PSLA"] = {"eligible": True, "condition": "Uniquement pour un programme agréé PSLA",
+                         "avantages": ["TVA réduite (5,5 %)", "Exonération de taxe foncière possible (15 ans)",
+                                       "Phase locative avant l'achat"]}
     else:
-        aides["PSLA"] = {"eligible": False, "raison": "Réservé au neuf"}
-
+        aides["PSLA"] = {"eligible": False, "raison": "Réservé aux logements neufs agréés"}
     return aides
 
 
@@ -326,34 +289,38 @@ def comparer_location_achat(params):
 
 
 # ---------------------------------------------------------------- géocodage et POI (OpenStreetMap)
-def geocoder_adresse(adresse):
-    """Géocode une adresse via OpenStreetMap Nominatim (gratuit)."""
-    try:
-        url = "https://nominatim.openstreetmap.org/search"
-        params = {
-            "q": adresse,
-            "format": "json",
-            "limit": 1,
-            "countrycodes": "fr",
-        }
-        headers = {
-            "User-Agent": "VEFA-Dashboard/1.0 (immobilier-simulation)"
-        }
-        response = requests.get(url, params=params, headers=headers, timeout=5)
-        response.raise_for_status()
-        data = response.json()
+UA = {"User-Agent": "VEFA-Dashboard/1.0 (immobilier-simulation)"}
 
-        if data and len(data) > 0:
-            return {
-                "success": True,
-                "lat": float(data[0]["lat"]),
-                "lon": float(data[0]["lon"]),
-                "display_name": data[0]["display_name"],
-            }
-        else:
-            return {"success": False, "error": "Adresse non trouvée"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+
+def geocoder_adresse(adresse):
+    """Géocode via la Base Adresse Nationale (api-adresse.data.gouv.fr), repli sur Nominatim."""
+    try:
+        r = requests.get("https://api-adresse.data.gouv.fr/search/", params={"q": adresse, "limit": 1},
+                         headers=UA, timeout=(5, 10))
+        r.raise_for_status()
+        feats = r.json().get("features") or []
+        if feats:
+            pr, (lon, lat) = feats[0]["properties"], feats[0]["geometry"]["coordinates"]
+            return {"success": True, "lat": float(lat), "lon": float(lon), "display_name": pr.get("label", adresse),
+                    "code_insee": pr.get("citycode"), "code_postal": pr.get("postcode"), "commune": pr.get("city"),
+                    "source": "Base Adresse Nationale"}
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        pass
+    try:
+        r = requests.get("https://nominatim.openstreetmap.org/search", headers=UA, timeout=(5, 10),
+                         params={"q": adresse, "format": "json", "limit": 1, "countrycodes": "fr",
+                                 "addressdetails": 1})
+        r.raise_for_status()
+        data = r.json()
+        if data:
+            ad = data[0].get("address", {})
+            return {"success": True, "lat": float(data[0]["lat"]), "lon": float(data[0]["lon"]),
+                    "display_name": data[0]["display_name"], "code_postal": ad.get("postcode"),
+                    "code_insee": None, "commune": ad.get("city") or ad.get("town") or ad.get("village"),
+                    "source": "OpenStreetMap"}
+        return {"success": False, "error": "Adresse introuvable : vérifiez l'orthographe ou ajoutez la ville."}
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return {"success": False, "error": "Service de géolocalisation indisponible, réessayez dans un instant."}
 
 
 OVERPASS_URLS = [
@@ -483,46 +450,127 @@ def calculer_rating_quartier(poi):
     }
 
 
-def determiner_zone_par_code_postal(code_postal):
-    """Détermine la zone géographique (A/A bis/B1/B2/C) selon le code postal."""
-    # Zonage plus précis pour l'Île-de-France
-    zones_par_code_postal = {
-        # Paris (75) - Zone A bis
-        "75001": "Abis", "75002": "Abis", "75003": "Abis", "75004": "Abis", "75005": "Abis",
-        "75006": "Abis", "75007": "Abis", "75008": "Abis", "75009": "Abis", "75010": "Abis",
-        "75011": "Abis", "75012": "Abis", "75013": "Abis", "75014": "Abis", "75015": "Abis",
-        "75016": "Abis", "75017": "Abis", "75018": "Abis", "75019": "Abis", "75020": "Abis",
-        # Petite couronne - Zone A bis (communes limitrophes de Paris et Arcueil)
-        "92000": "Abis", "92100": "Abis", "92200": "Abis", "92300": "Abis", "92400": "Abis",
-        "93000": "Abis", "93100": "Abis", "93200": "Abis", "93300": "Abis", "93400": "Abis",
-        "93500": "Abis", "94000": "Abis", "94100": "Abis", "94200": "Abis", "94220": "Abis",  # Arcueil
-        "94300": "Abis", "94400": "Abis", "94500": "Abis", "94600": "Abis", "94700": "Abis", "94800": "Abis",
-        # Autres communes IDF - Zone A
-        "75": "Abis", "77": "A", "78": "A", "91": "A", "92": "A", "93": "A", "94": "A", "95": "A",
-        # Grandes métropoles - Zone A
-        "06": "A", "13": "A", "69": "A", "59": "A", "31": "A", "33": "A", "44": "A",
-        # Autres - Zone B1
-        "default": "B1",
-    }
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "zonage_abc.json"),
+          encoding="utf-8") as _f:
+    ZONAGE = json.load(_f)
 
-    code_postal = str(code_postal or "").strip()
-    # Vérifier d'abord le code postal complet
-    if code_postal in zones_par_code_postal:
-        return zones_par_code_postal[code_postal]
 
-    # Sinon, vérifier par département
-    dept = code_postal[:2] if len(code_postal) >= 2 else code_postal
-    if dept in zones_par_code_postal:
-        return zones_par_code_postal[dept]
+def zone_commune(code_insee):
+    """Zone A bis / A / B1 / B2 / C d'une commune (code INSEE), selon l'arrêté en vigueur."""
+    code = str(code_insee or "").strip().upper()
+    if code.startswith("751") and len(code) == 5:  # arrondissements de Paris
+        code = "75056"
+    return ZONAGE["zones"].get(code, ZONAGE["defaut"])
 
-    return "B2"  # Défaut B2
+
+def communes_code_postal(code_postal):
+    """Communes d'un code postal via geo.api.gouv.fr (liste vide si le service est indisponible)."""
+    try:
+        r = requests.get("https://geo.api.gouv.fr/communes", params={"codePostal": code_postal, "fields": "nom,code"},
+                         headers=UA, timeout=(5, 10))
+        r.raise_for_status()
+        return [c for c in r.json() if isinstance(c, dict) and c.get("code")]
+    except (requests.RequestException, ValueError):
+        return []
+
+
+def determiner_zone(code_insee=None, code_postal=None):
+    if code_insee:
+        z = zone_commune(code_insee)
+        return {"zone": z, "communes": [{"code": str(code_insee), "zone": z}], "source": ZONAGE["source"]}
+    cp = str(code_postal or "").strip()
+    if not (len(cp) == 5 and cp.isdigit()):
+        return {"zone": None, "error": "Code postal invalide (5 chiffres)."}
+    if cp.startswith("75"):
+        return {"zone": "Abis", "communes": [{"code": "75056", "nom": "Paris", "zone": "Abis"}], "source": ZONAGE["source"]}
+    communes = [dict(c, zone=zone_commune(c["code"])) for c in communes_code_postal(cp)]
+    if not communes:
+        return {"zone": None, "error": "Zone introuvable pour ce code postal (service geo.api.gouv.fr indisponible ?)."}
+    zones = {c["zone"] for c in communes}
+    res = {"zone": communes[0]["zone"], "communes": communes, "source": ZONAGE["source"]}
+    if len(zones) > 1:
+        res["avertissement"] = "Ce code postal couvre plusieurs communes de zones différentes : choisissez la commune."
+    return res
+
+
+def fiscalite_locale(code_insee):
+    """Taux votés de taxe foncière bâtie et de TEOM (REI, data.economie.gouv.fr), dernier exercice."""
+    code = str(code_insee or "").strip().upper()
+    if code.startswith("751") and len(code) == 5:
+        code = "75056"
+    if not (len(code) == 5 and code.isalnum()):
+        return {"success": False, "error": "Code commune invalide."}
+    try:
+        r = requests.get("https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/"
+                         "fiscalite-locale-des-particuliers/records", headers=UA, timeout=(5, 15),
+                         params={"where": f'insee_com="{code}"', "order_by": "exercice desc", "limit": 1})
+        r.raise_for_status()
+        rec = (r.json().get("results") or [None])[0]
+    except (requests.RequestException, ValueError):
+        return {"success": False, "error": "Données fiscales indisponibles pour le moment, réessayez plus tard."}
+    if not rec or rec.get("taux_global_tfb") is None:
+        return {"success": False, "error": "Aucun taux publié pour cette commune."}
+    return {"success": True, "commune": rec.get("libcom"), "exercice": rec.get("exercice"),
+            "taux_tfb": nombre(rec.get("taux_global_tfb"), 0), "taux_teom": nombre(rec.get("taux_plein_teom"), 0),
+            "source": "DGFiP – Fiscalité locale des particuliers (REI), data.economie.gouv.fr"}
+
+
+def calcul_taxe_fonciere(vlc, taux_tfb, taux_teom):
+    """Base d'imposition = 50 % de la valeur locative cadastrale (art. 1388 et 1522 du CGI),
+    majorée des frais de gestion de l'État : 3 % (taxe foncière) et 8 % (TEOM) (art. 1641 du CGI)."""
+    base = max(vlc, 0) * 0.5
+    return {"base": base, "tfpb": base * taux_tfb / 100 * 1.03, "teom": base * taux_teom / 100 * 1.08}
+
 
 DEFAULTS = dict(
     prix=302000, apport=50000, date_achat="2027-01-01", date_liv="2029-07-01", fonds="vefa",
     taux=4.0, duree=18, ass=0.25,
     ptz=54000, ptz_dif=0, ptz_dur=10,
     al=30000, taux_al=1.0, duree_al=18,
+    etat="neuf", frais_dossier=1000, garantie=1.0, courtage=0,
+    tf=900, teom=120, tf_exo=40,
 )
+
+# Frais de notaire (service-public.fr F17701, vérifié le 05/08/2026) : émoluments proportionnels
+# du notaire (barème réglementé, TVA 20 %), droits d'enregistrement / taxe de publicité foncière,
+# contribution de sécurité immobilière (0,10 %, 15 € min.) et forfait débours et formalités.
+TVA = 0.20
+BAREME_EMOLUMENTS = [(6500, 0.03870), (17000, 0.01596), (60000, 0.01064), (math.inf, 0.00799)]
+TAUX_DROITS = {"neuf": 0.00715, "ancien": 0.0580665}  # TPF sur le prix HT (VEFA) / DMTO sur le prix
+TAUX_CSI, CSI_MIN, DEBOURS = 0.001, 15, 1200
+
+
+def emoluments(base):
+    """Émoluments proportionnels du notaire (hors TVA) pour une vente de prix « base »."""
+    total, bas = 0.0, 0.0
+    for haut, taux in BAREME_EMOLUMENTS:
+        if base > bas:
+            total += (min(base, haut) - bas) * taux
+        bas = haut
+    return total
+
+
+def frais_notaire(prix, etat):
+    """Décomposition des frais d'acquisition. En VEFA la base est le prix hors TVA (20 %)."""
+    if prix <= 0:
+        return dict(emoluments=0.0, tva=0.0, droits=0.0, csi=0.0, debours=0.0, total=0.0)
+    base = prix / (1 + TVA) if etat == "neuf" else prix
+    em = emoluments(base)
+    d = dict(emoluments=em, tva=em * TVA, droits=base * TAUX_DROITS[etat],
+             csi=max(CSI_MIN, prix * TAUX_CSI), debours=DEBOURS)
+    d["total"] = sum(d.values())
+    return d
+
+
+def frais_initiaux(p):
+    """Frais payés à la signature. La garantie (% de prêt principal + PTZ) se calcule sur un capital
+    qui l'inclut lui-même si elle est financée : G = g × (B + G), soit G = g × B / (1 − g)."""
+    notaire = frais_notaire(p["prix"], p["etat"])["total"]
+    g = p["garantie"] / 100
+    b = p["prix"] + notaire + p["frais_dossier"] + p["courtage"] - p["apport"] - p["al"]
+    garantie = g * b / (1 - g) if b > 0 else 0.0
+    return dict(notaire=notaire, dossier=p["frais_dossier"], garantie=garantie, courtage=p["courtage"],
+                total=notaire + p["frais_dossier"] + garantie + p["courtage"])
 
 
 def champ(id, label, mini, maxi, pas, unite):
@@ -556,6 +604,18 @@ GROUPES = [
         champ("taux_al", "Taux", 0, 3, 0.05, "%"),
         champ("duree_al", "Durée après livraison", 5, 25, 1, "ans"),
     ]),
+    ("Frais d'acquisition et de crédit", [
+        dict(id="etat", label="Type de bien (frais de notaire)", type="select", options=[
+            ("neuf", "Neuf / VEFA (TVA 20 %)"), ("ancien", "Ancien")]),
+        champ("frais_dossier", "Frais de dossier bancaire", 0, 5000, 50, "€"),
+        champ("garantie", "Garantie (caution ou hypothèque)", 0, 3, 0.05, "%"),
+        champ("courtage", "Frais de courtage", 0, 10000, 100, "€"),
+    ]),
+    ("Taxe foncière (après livraison)", [
+        champ("tf", "Taxe foncière bâtie, année pleine", 0, 10000, 10, "€"),
+        champ("teom", "Taxe d'ordures ménagères (TEOM)", 0, 3000, 10, "€"),
+        champ("tf_exo", "Exonération neuf les 2 premières années", 0, 100, 10, "%"),
+    ]),
 ]
 
 
@@ -587,6 +647,13 @@ def nettoyer(brut):
             p[k] = DEFAULTS[k]
     if p["fonds"] not in ("vefa", "lin", "tout"):
         p["fonds"] = "vefa"
+    if p["etat"] not in TAUX_DROITS:
+        p["etat"] = "neuf"
+    for k, defaut in DEFAULTS.items():  # aucun montant, taux ou durée négatif
+        if not isinstance(defaut, str):
+            p[k] = max(0.0, p[k])
+    p["garantie"] = min(p["garantie"], 50.0)
+    p["tf_exo"] = min(p["tf_exo"], 100.0)
     return p
 
 
@@ -604,7 +671,8 @@ def part_appelee(fonds, m, nb):
 
 def simuler(p):
     nb = max(0, mois_entre(p["date_achat"], p["date_liv"]))
-    princ = p["prix"] - p["apport"] - p["ptz"] - p["al"]
+    frais = frais_initiaux(p)["total"]  # payés à la signature, d'abord par l'apport
+    princ = p["prix"] + frais - p["apport"] - p["ptz"] - p["al"]
     total = princ + p["ptz"] + p["al"]
     r, r_al, ia = p["taux"] / 1200, p["taux_al"] / 1200, p["ass"] / 1200
     m_princ = pmt(princ, r, p["duree"] * 12)
@@ -614,7 +682,7 @@ def simuler(p):
 
     # Phase 1 : chantier (intérêts + assurance sur les fonds débloqués)
     for m in range(1, nb + 1):
-        du = p["prix"] * part_appelee(p["fonds"], m, nb)
+        du = p["prix"] * part_appelee(p["fonds"], m, nb) + frais
         debloque = min(max(du - p["apport"], 0), total)
         part = debloque / total if total > 0 else 0
         rows.append(dict(m=m, phase=1, interet=princ * part * r + p["al"] * part * r_al,
@@ -689,8 +757,55 @@ def periodes(rows, nb, p):
                  mini=round(s["mini"], 2), maxi=round(s["maxi"], 2), restant=n - s["debut"]) for s in segs]
 
 
+def taeg(rows, nb, total, frais_credit):
+    """TAEG actuariel (directive 2014/17/UE) de l'ensemble des prêts : taux mensuel i tel que
+    les fonds débloqués actualisés égalent échéances + frais de crédit (dossier, garantie, courtage)
+    actualisés ; TAEG = (1 + i)^12 − 1. Déblocage du mois m en début de mois, échéance en fin."""
+    if total <= 0:
+        return 0.0
+    flux = [0.0] * (len(rows) + 1)
+    deja = 0.0
+    for m in range(1, nb + 1):
+        deb = rows[m - 1]["balP"] + rows[m - 1]["balAl"] + rows[m - 1]["balPtz"]
+        flux[m - 1] += deb - deja
+        deja = deb
+    flux[nb] += total - deja
+    flux[0] -= frais_credit
+    for j, x in enumerate(rows, 1):
+        flux[j] -= x["total"]
+
+    def van(i):
+        v, f = 0.0, 1.0
+        for c in flux:
+            v += c * f
+            f /= 1 + i
+        return v
+    bas, haut = -0.0099, 0.05
+    if van(bas) > 0 or van(haut) < 0:
+        return None
+    for _ in range(80):
+        mil = (bas + haut) / 2
+        if van(mil) < 0:
+            bas = mil
+        else:
+            haut = mil
+    return ((1 + (bas + haut) / 2) ** 12 - 1) * 100
+
+
+def taxe_fonciere_annee(p, annee):
+    """Taxe foncière due au titre d'une année (propriétaire au 1er janvier). Neuf : due à partir du
+    1er janvier suivant l'achèvement, TFPB exonérée de tf_exo % les 2 premières années, TEOM due."""
+    y_liv = int(p["date_liv"][:4]) if p["etat"] == "neuf" else int(p["date_achat"][:4])
+    if annee <= y_liv:
+        return 0.0
+    exo = p["tf_exo"] / 100 if p["etat"] == "neuf" and annee <= y_liv + 2 else 0.0
+    return p["tf"] * (1 - exo) + p["teom"]
+
+
 def synthese(p):
     nb, princ, total, rows = simuler(p)
+    fi = frais_initiaux(p)
+    taux_eff = taeg(rows, nb, total, fi["dossier"] + fi["garantie"] + fi["courtage"])
     phase2 = [x for x in rows if x["phase"] == 2]
     dernier_ptz = max((i for i, x in enumerate(rows) if x["ptz"] > 0), default=None)
     apres_ptz = (rows[dernier_ptz + 1]["total"]
@@ -703,6 +818,14 @@ def synthese(p):
         alertes.append("L'apport et les aides dépassent le prix : le prêt principal est négatif.")
     if p["ptz_dur"] <= p["ptz_dif"]:
         alertes.append("La durée totale du PTZ doit dépasser le différé.")
+    if princ >= 0 and p["apport"] < fi["total"]:
+        alertes.append(f"L'apport ne couvre pas les frais ({fi['total']:,.0f} €) : "
+                       f"{fi['total'] - p['apport']:,.0f} € sont financés par le prêt, ce que "
+                       "beaucoup de banques refusent.".replace(",", " "))
+    if p["ptz"] > max(princ, 0) + p["al"]:
+        alertes.append("Le PTZ ne peut pas dépasser le montant des autres prêts.")
+    if p["date_liv"] < p["date_achat"]:
+        alertes.append("La date de livraison est antérieure à la date d'achat.")
 
     while rows and rows[-1]["total"] <= 0.005:  # on coupe les mois sans échéance
         rows.pop()
@@ -724,6 +847,12 @@ def synthese(p):
             total_rembourse=sum(x["total"] for x in rows),
             duree_mois=len(rows),
             mois_chantier=nb,
+            frais_notaire=fi["notaire"], frais_dossier=fi["dossier"], frais_garantie=fi["garantie"],
+            courtage=fi["courtage"], frais_initiaux=fi["total"],
+            cout_total=p["prix"] + fi["total"] + interets + assurance,
+            taeg=taux_eff,
+            tf_pleine=p["tf"] + p["teom"],
+            mensualite_avec_tf=(phase2[0]["total"] if phase2 else 0) + (p["tf"] + p["teom"]) / 12,
             **{f"mf_{k}": (phase2[0][k] if phase2 else 0)
                for k in ("princ", "al", "ptz", "interet", "ass")},
         ),
@@ -737,6 +866,7 @@ def synthese(p):
                      interets=sum(x["interet"] for x in a),
                      assurance=sum(x["ass"] for x in a),
                      total=sum(x["total"] for x in a),
+                     taxe_fonciere=taxe_fonciere_annee(p, y),
                      capital_fin=a[-1]["bal"])
                 for y, a in annuel.items()],
         alertes=alertes,
@@ -823,10 +953,30 @@ def api_rating():
 
 @app.post("/api/zone")
 def api_zone():
-    """API pour déterminer la zone géographique par code postal."""
+    """Zone ABC officielle par code INSEE (prioritaire) ou code postal."""
     params = corps_json()
-    code_postal = params.get("code_postal", "")
-    return jsonify({"zone": determiner_zone_par_code_postal(code_postal)})
+    return jsonify(determiner_zone(params.get("code_insee"), params.get("code_postal")))
+
+
+@app.post("/api/fiscalite")
+def api_fiscalite():
+    """Taux de taxe foncière de la commune et, si la valeur locative est fournie, le montant."""
+    params = corps_json()
+    res = fiscalite_locale(params.get("code_insee"))
+    vlc = nombre(params.get("vlc"), 0)
+    if res["success"] and vlc > 0:
+        res.update(calcul_taxe_fonciere(vlc, res["taux_tfb"], res["taux_teom"]))
+    return jsonify(res)
+
+
+@app.errorhandler(Exception)
+def erreur_interne(e):
+    """Jamais de page d'erreur brute : message lisible en JSON pour l'interface."""
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return jsonify({"success": False, "error": e.description}), e.code
+    app.logger.exception(e)
+    return jsonify({"success": False, "error": "Erreur inattendue, merci de réessayer."}), 500
 
 
 if __name__ == "__main__":

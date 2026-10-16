@@ -37,6 +37,18 @@
       <div id="zone-info" style="display:none;" class="card">
         <h3>Zone détectée</h3>
         <p><strong id="zone-texte">-</strong></p>
+        <p><small id="zone-source"></small></p>
+      </div>
+
+      <div id="fisc-info" style="display:none;" class="card">
+        <h3>Taxe foncière de la commune</h3>
+        <p id="fisc-taux"></p>
+        <div class="f">
+          <label for="vlc">Valeur locative cadastrale brute (€/an, avis de taxe foncière ou promoteur)</label>
+          <input type="number" id="vlc" min="0" step="100" placeholder="Ex : 3000">
+        </div>
+        <p id="fisc-montant"></p>
+        <p><small id="fisc-source"></small></p>
       </div>
     </aside>
 
@@ -89,17 +101,13 @@ async function analyserBien() {
   $('error').style.display = 'none';
   $('poi-results').style.display = 'none';
   $('zone-info').style.display = 'none';
+  $('fisc-info').style.display = 'none';
   document.getElementById('rating')?.remove();
   clearMarkers();
 
   try {
     // Géocodage
-    const geoResponse = await fetch('/api/geocoder', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({adresse}),
-    });
-    const geoData = await geoResponse.json();
+    const geoData = await postJSON('/api/geocoder', {adresse});
 
     if (!geoData.success) {
       throw new Error(geoData.error || "Adresse non trouvée");
@@ -129,40 +137,41 @@ async function analyserBien() {
     }).addTo(map);
     markers.push(circle);
 
-    // Déterminer la zone
-    const codePostalMatch = geoData.display_name.match(/\b(\d{5})\b/);
-    if (codePostalMatch) {
-      const zoneResponse = await fetch('/api/zone', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({code_postal: codePostalMatch[1]}),
-      });
-      const zoneData = await zoneResponse.json();
+    // Zone ABC officielle et fiscalité locale (n'empêchent jamais la suite de l'analyse)
+    try {
+      const zoneData = await postJSON('/api/zone', geoData.code_insee
+        ? {code_insee: geoData.code_insee} : {code_postal: geoData.code_postal || (geoData.display_name.match(/\b(\d{5})\b/) || [])[1]});
       $('zone-info').style.display = 'block';
-      $('zone-texte').textContent = `Zone ${zoneData.zone}`;
+      $('zone-texte').textContent = zoneData.zone ? `Zone ${zoneData.zone}` : (zoneData.error || 'Zone inconnue');
+      $('zone-source').textContent = (zoneData.avertissement ? zoneData.avertissement + ' ' : '') + (zoneData.source || '');
+    } catch (e) { /* zone facultative */ }
+    if (geoData.code_insee) {
+      try {
+        const f = await postJSON('/api/fiscalite', {code_insee: geoData.code_insee});
+        $('fisc-info').style.display = 'block';
+        if (f.success) {
+          fisc = f;
+          $('fisc-taux').innerHTML = `${esc(f.commune)} (${esc(f.exercice)}) : taxe foncière bâtie <b>${f.taux_tfb.toLocaleString('fr-FR')} %</b>, TEOM <b>${f.taux_teom.toLocaleString('fr-FR')} %</b>`;
+          $('fisc-source').textContent = f.source + ". Base = 50 % de la valeur locative cadastrale. Neuf : exonération de 2 ans (40 à 100 % selon la commune), TEOM toujours due.";
+        } else { fisc = null; $('fisc-taux').textContent = f.error; }
+        majTaxe();
+      } catch (e) { $('fisc-info').style.display = 'none'; }
     }
 
-    // Rechercher les POI
-    const poiResponse = await fetch('/api/poi', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({lat, lon, rayon}),
-    });
-    const poiData = await poiResponse.json();
+    // Rechercher les POI : serveur, puis directement depuis le navigateur si le serveur échoue
+    let poiData;
+    try { poiData = await postJSON('/api/poi', {lat, lon, rayon}); }
+    catch (e) { poiData = {success: false, error: e.message}; }
+    if (!poiData.success) {
+      try { poiData = {success: true, poi: await poiNavigateur(lat, lon, rayon)}; }
+      catch (e) { /* message du serveur conservé */ }
+    }
 
     if (poiData.success) {
       afficherPOI(poiData.poi, lat, lon);
-      
-      // Calculer le rating
-      const ratingResponse = await fetch('/api/rating', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({poi: poiData.poi}),
-      });
-      const ratingData = await ratingResponse.json();
-      afficherRating(ratingData);
+      try { afficherRating(await postJSON('/api/rating', {poi: poiData.poi})); } catch (e) { /* note facultative */ }
     } else {
-      showError(poiData.error || "Recherche des commodités impossible");
+      showError((poiData.error || "Recherche des commodités impossible") + " La zone et la fiscalité restent affichées.");
     }
 
   } catch (error) {
@@ -235,6 +244,45 @@ function afficherRating(rating) {
   $('poi-results').insertBefore(ratingDiv, $('poi-liste'));
 }
 
+let fisc = null;
+async function postJSON(url, corps) {
+  let r;
+  try {
+    r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corps)});
+  } catch (e) { throw new Error("Connexion au serveur impossible, vérifiez votre réseau."); }
+  try { return await r.json(); } catch (e) { throw new Error(`Réponse invalide du serveur (${r.status}).`); }
+}
+
+function majTaxe() {
+  const vlc = parseFloat($('vlc').value);
+  if (!fisc || !(vlc > 0)) { $('fisc-montant').textContent = fisc ? 'Saisissez la valeur locative pour calculer le montant.' : ''; return; }
+  const base = vlc * 0.5, tf = base * fisc.taux_tfb / 100 * 1.03, teom = base * fisc.taux_teom / 100 * 1.08;
+  const e = x => x.toLocaleString('fr-FR', {style: 'currency', currency: 'EUR', maximumFractionDigits: 0});
+  $('fisc-montant').innerHTML = `Taxe foncière bâtie <b>${e(tf)}</b> + TEOM <b>${e(teom)}</b> = <b>${e(tf + teom)}</b> par an (frais de gestion de l'État inclus : +3 % et +8 %). Reportez ces montants dans le simulateur.`;
+}
+
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter',
+                  'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const FILTRES = [['railway', 'station', 'Transport'], ['highway', 'bus_stop', 'Transport'], ['amenity', 'school', 'Éducation'],
+  ['amenity', 'kindergarten', 'Éducation'], ['amenity', 'supermarket', 'Commerce'], ['shop', 'bakery', 'Commerce'],
+  ['amenity', 'pharmacy', 'Santé'], ['amenity', 'hospital', 'Santé'], ['leisure', 'park', 'Loisir'],
+  ['amenity', 'restaurant', 'Restaurant'], ['amenity', 'parking', null]];
+async function poiNavigateur(lat, lon, rayon) {
+  const q = `[out:json][timeout:25];(${FILTRES.map(([k, v]) => `node["${k}"="${v}"](around:${rayon},${lat},${lon});`).join('')});out body;`;
+  for (const url of OVERPASS) {
+    try {
+      const r = await fetch(url, {method: 'POST', body: new URLSearchParams({data: q})});
+      if (!r.ok) continue;
+      const d = await r.json();
+      return (d.elements || []).map(el => {
+        const t = el.tags || {}, f = FILTRES.find(([k, v]) => t[k] === v);
+        return f && f[2] ? {type: f[2], nom: t.name || 'Sans nom', lat: el.lat, lon: el.lon} : null;
+      }).filter(Boolean);
+    } catch (e) { /* serveur suivant */ }
+  }
+  throw new Error('Overpass indisponible');
+}
+
 function showError(message) {
   $('error').style.display = 'block';
   $('error-text').textContent = message;
@@ -244,6 +292,7 @@ function showError(message) {
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
   $('analyser').addEventListener('click', analyserBien);
+  $('vlc').addEventListener('input', majTaxe);
 });
 </script>
 </body>

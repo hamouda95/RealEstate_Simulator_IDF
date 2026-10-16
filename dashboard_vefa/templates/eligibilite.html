@@ -34,8 +34,8 @@
         <label for="zone">Zone géographique</label>
         <select id="zone">
           <option value="A">Zone A (Paris, Île-de-France, grandes métropoles)</option>
-          <option value="Abis">Zone A bis (Paris et 76 communes IDF)</option>
-          <option value="B1" selected>Zone B1 (Agglomérations >250 000 hab.)</option>
+          <option value="Abis" selected>Zone A bis (Paris et 76 communes IDF)</option>
+          <option value="B1">Zone B1 (Agglomérations >250 000 hab.)</option>
           <option value="B2">Zone B2 (Agglomérations >50 000 hab.)</option>
           <option value="C">Zone C (Reste du territoire)</option>
         </select>
@@ -44,8 +44,8 @@
       <div class="f full">
         <label for="type_logement">Type de logement</label>
         <select id="type_logement">
-          <option value="neuf" selected>Logement neuf</option>
-          <option value="vefa">VEFA (vente en l'état futur d'achèvement)</option>
+          <option value="vefa" selected>Neuf en immeuble collectif (VEFA appartement)</option>
+          <option value="neuf">Neuf individuel (maison)</option>
           <option value="ancien">Logement ancien avec travaux</option>
         </select>
       </div>
@@ -53,6 +53,10 @@
       <div class="f">
         <label for="prix">Prix du bien (€)</label>
         <input type="number" id="prix" min="50000" max="1000000" step="1000" value="300000">
+      </div>
+      <div class="f">
+        <label for="apport">Apport personnel (€)</label>
+        <input type="number" id="apport" min="0" max="1000000" step="1000" value="30000">
       </div>
 
       <div class="f full">
@@ -84,6 +88,7 @@ async function testerEligibilite() {
     type_logement: $('type_logement').value,
     prix: parseFloat($('prix').value) || 0,
     salarie: $('salarie').checked,
+    apport: parseFloat($('apport').value) || 0,
   };
 
   $('loading').style.display = 'block';
@@ -96,9 +101,10 @@ async function testerEligibilite() {
       body: JSON.stringify(params),
     });
     const data = await response.json();
+    if (!response.ok || data.success === false) throw new Error(data.error || "service indisponible");
     afficherResultats(data);
   } catch (error) {
-    $('resultats').innerHTML = `<p class="warn">Erreur: ${error.message}</p>`;
+    $('resultats').innerHTML = `<p class="warn">Calcul impossible : ${error.message}. Vérifiez les champs puis réessayez.</p>`;
   } finally {
     $('loading').style.display = 'none';
   }
@@ -120,7 +126,10 @@ function afficherResultats(aides) {
         html += `Quotité finançable: ${aide.quotite}%<br>`;
       }
       if (aide.duree_max) {
-        html += `Durée maximale: ${aide.duree_max} ans<br>`;
+        html += `Durée maximale: ${aide.duree_max} ans${aide.differe !== undefined ? ` dont ${aide.differe} ans de différé` : ''}<br>`;
+      }
+      if (aide.cout_retenu) {
+        html += `Coût de l'opération retenu: ${aide.cout_retenu.toLocaleString('fr-FR')} € · revenu retenu: ${aide.revenu_retenu.toLocaleString('fr-FR')} € (coef. familial ${aide.coef_familial})<br>`;
       }
       if (aide.tranche) {
         html += `Tranche: ${aide.tranche}<br>`;
@@ -135,7 +144,10 @@ function afficherResultats(aides) {
         html += `<ul>${aide.avantages.map(a => `<li>${a}</li>`).join('')}</ul>`;
       }
       if (aide.condition) {
-        html += `<small>${aide.condition}</small>`;
+        html += `<small>${aide.condition}</small><br>`;
+      }
+      if (aide.source) {
+        html += `<small class="note">Source : ${aide.source}</small>`;
       }
       
       html += `</p></div>`;

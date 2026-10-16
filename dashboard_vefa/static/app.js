@@ -4,7 +4,7 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 const eur = (x, d = 0) => x.toLocaleString("fr-FR", {style: "currency", currency: "EUR", minimumFractionDigits: d, maximumFractionDigits: d});
 const duree = m => { const a = Math.floor(m / 12), r = m % 12;
   return [a ? `${a} an${a > 1 ? "s" : ""}` : "", r ? `${r} mois` : ""].filter(Boolean).join(" ") || "0 mois"; };
-const fmt = (v, d) => d === "mois" ? duree(v) : eur(v, d);
+const fmt = (v, d) => v === null || v === undefined ? "–" : d === "mois" ? duree(v) : d === "pct" ? v.toLocaleString("fr-FR", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " %" : eur(v, d);
 const moisLabel = (date, i) => { const d0 = new Date(date);
   return new Date(d0.getFullYear(), d0.getMonth() + i + 1, 1).toLocaleDateString("fr-FR", {month: "short", year: "numeric"}); };
 const budget = {epargne: 1130, loyer: 2000, finLoyer: "2029-07-01"};
@@ -32,6 +32,15 @@ const LIGNES = [  // [libellé, clé du KPI, décimales, ligne mise en avant]
   ["Coût du crédit", "cout_credit", 0, "hl"],
   ["Total remboursé", "total_rembourse", 0],
   ["Durée totale du crédit", "duree_mois", "mois"],
+  ["TAEG global (tous prêts, assurance et frais inclus)", "taeg", "pct", "hl"],
+  ["Frais à la signature", "frais_initiaux", 0, "hl"],
+  ["dont frais de notaire (estimation)", "frais_notaire", 0, "sub"],
+  ["dont frais de dossier", "frais_dossier", 0, "sub"],
+  ["dont garantie", "frais_garantie", 0, "sub"],
+  ["dont courtage", "courtage", 0, "sub"],
+  ["Coût total (prix + frais + crédit)", "cout_total", 0, "hl"],
+  ["Taxe foncière + TEOM (année pleine)", "tf_pleine", 0],
+  ["Mensualité finale + taxe foncière / 12", "mensualite_avec_tf", 2],
 ];
 
 let scenarios = [{nom: "Scénario A", p: {...DEFAULTS}}];
@@ -214,11 +223,11 @@ function renderAnnuel() {
   const ec = (v, b) => `<td class="${b - v >= 0 ? "ok" : "ko"}">${signe(b - v)}</td>`;
   if (vue === "an") {
     let pos = 0;
-    $("annuel").innerHTML = "<tr><th>Année</th><th>Mois</th><th>Mensualité moy.</th><th>Min – max</th><th>Intérêts</th><th>Assurance</th><th>Total payé</th><th>Marge moy./mois</th><th>Capital restant fin d'année</th></tr>" +
+    $("annuel").innerHTML = "<tr><th>Année</th><th>Mois</th><th>Mensualité moy.</th><th>Min – max</th><th>Intérêts</th><th>Assurance</th><th>Total payé</th><th>Taxe foncière</th><th>Marge moy./mois</th><th>Capital restant fin d'année</th></tr>" +
       r.annuel.map(a => {
         const deb = pos; pos += a.mois;
         const bm = Array.from({length: a.mois}, (_, k) => budgetMois(deb + k, sp.date_achat)).reduce((x, y) => x + y, 0) / a.mois;
-        return `<tr><td>${a.annee}</td><td>${a.mois}</td><td>${eur(a.mensualite_moy, 2)}</td><td>${plage(a.mini, a.maxi)}</td><td>${eur(a.interets)}</td><td>${eur(a.assurance)}</td><td>${eur(a.total)}</td>${ec(a.mensualite_moy, bm)}<td>${eur(a.capital_fin)}</td></tr>`; }).join("");
+        return `<tr><td>${a.annee}</td><td>${a.mois}</td><td>${eur(a.mensualite_moy, 2)}</td><td>${plage(a.mini, a.maxi)}</td><td>${eur(a.interets)}</td><td>${eur(a.assurance)}</td><td>${eur(a.total)}</td><td>${eur(a.taxe_fonciere || 0)}</td>${ec(a.mensualite_moy, bm)}<td>${eur(a.capital_fin)}</td></tr>`; }).join("");
   } else {
     const d = r.detail;
     $("annuel").innerHTML = "<tr><th>Mois</th><th>Prêt principal</th><th>Act. Logement</th><th>PTZ</th><th>Intérêts</th><th>Assurance</th><th>Mensualité réelle</th><th>Marge</th><th>Capital restant</th></tr>" +

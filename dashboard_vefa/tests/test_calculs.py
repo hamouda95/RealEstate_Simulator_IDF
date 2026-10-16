@@ -10,7 +10,8 @@ from unittest import mock
 import requests
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app import (app, DEFAULTS, APPELS_VEFA, nettoyer, pmt, simuler, synthese, mois_entre, frais_initiaux,
-                 frais_notaire, emoluments, calculer_ptz, taeg, taxe_fonciere_annee, zone_commune)
+                 frais_notaire, emoluments, calculer_ptz, taeg, taxe_fonciere_annee, zone_commune,
+                 capacite_emprunt, mensualites_aides)
 
 TOL = 0.011
 
@@ -148,6 +149,49 @@ class Frais(unittest.TestCase):
         self.assertEqual({x["annee"]: x["taxe_fonciere"] for x in s["annuel"]}[2032], 1100)
 
 
+class Capacite(unittest.TestCase):
+    BASE = dict(revenus=5000, charges=0, apport=50000, taux=3.5, ass=0.3, duree=25, etat="neuf",
+                zone="Abis", revenu_fiscal=45000, nb_personnes=2, salarie=True)
+
+    def test_taux_effort_35(self):
+        r = capacite_emprunt(self.BASE)
+        self.assertAlmostEqual(r["budget_mensuel"], 1750)
+        self.assertLessEqual(r["mensualite"], 1750 + 1e-6)
+        self.assertGreater(r["mensualite"], 1749)  # le prix maximal sature le budget
+        # mensualité recalculée indépendamment : prêt principal + PTZ (après différé) + AL + assurance
+        ptz_m = r["ptz"] / ((r["ptz_duree"] - r["ptz_differe"]) * 12)
+        m = (pmt(r["pret_principal"], .035 / 12, 300) + ptz_m + pmt(r["al"], .01 / 12, 300)
+             + r["total_emprunte"] * .003 / 12)
+        self.assertAlmostEqual(m, r["mensualite"], places=4)
+        # prix + frais = apport + prêts
+        self.assertAlmostEqual(r["prix_max"] + r["frais_total"], r["apport"] + r["total_emprunte"], delta=1e-4)
+        self.assertEqual((r["ptz"], r["al"]), (90000, 30000))  # tranche 2 : 40 % × 225 000 €
+
+    def test_sans_aides_formule_fermee(self):
+        r = capacite_emprunt(dict(self.BASE, salarie=False, revenu_fiscal=200000, ass=0, garantie=0,
+                                  frais_dossier=0, charges=500))
+        self.assertEqual((r["ptz"], r["al"]), (0, 0))
+        capital = 1250 / pmt(1, .035 / 12, 300)  # (5 000 × 35 % − 500) / facteur
+        self.assertAlmostEqual(r["pret_principal"], capital, delta=2)  # prix arrondi à l'euro inférieur
+        self.assertAlmostEqual(r["reste_a_vivre"], 5000 - 500 - r["mensualite"])
+
+    def test_cas_limites(self):
+        self.assertEqual(capacite_emprunt({})["prix_max"], 0)
+        r = capacite_emprunt(dict(self.BASE, charges=2000))
+        self.assertEqual(r["prix_max"], 0)
+        self.assertTrue(r["alertes"])
+        self.assertTrue(capacite_emprunt(dict(self.BASE, duree=30))["alertes"])
+        self.assertTrue(capacite_emprunt(dict(self.BASE, etat="ancien", duree=26))["alertes"])
+        for v in ("x", None, -5, 1e12):
+            capacite_emprunt(dict(self.BASE, revenus=v, taux=v, duree=v, apport=v))
+
+    def test_projet(self):
+        r = capacite_emprunt(dict(self.BASE, prix_vise=302000))
+        self.assertTrue(r["projet"]["financable"])
+        self.assertLess(r["projet"]["taux_effort"], 35)
+        self.assertFalse(capacite_emprunt(dict(self.BASE, prix_vise=600000))["projet"]["financable"])
+
+
 class PTZ(unittest.TestCase):
     def test_exemple(self):
         r = calculer_ptz(300000, "vefa", "Abis", 30000, 2, 30000)
@@ -247,6 +291,11 @@ class Api(unittest.TestCase):
         self.assertFalse(self.c.post("/api/eligibilite", json=dict(zone="A", type_logement="ancien", prix=200000))
                          .get_json()["PTZ"]["eligible"])
         self.assertEqual(self.c.post("/api/eligibilite", json=dict(revenu_fiscal="x", nb_personnes="2")).status_code, 200)
+
+    def test_api_capacite(self):
+        d = self.c.post("/api/capacite", json=dict(Capacite.BASE)).get_json()
+        self.assertGreater(d["prix_max"], 0)
+        self.assertEqual(self.c.post("/api/capacite", json=[1]).status_code, 200)
 
     def test_zone(self):
         z = lambda **k: self.c.post("/api/zone", json=k).get_json()["zone"]

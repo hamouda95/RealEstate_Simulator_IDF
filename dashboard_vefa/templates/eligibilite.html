@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Test d'éligibilité aux aides – VEFA</title>
+<title>Mon foyer : aides et capacité d'emprunt</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
 <main>
   <header>
-    <h1>Test d'éligibilité aux aides</h1>
+    <h1>Mon foyer : aides et capacité d'emprunt</h1>
     <div class="bar"></div>
-    <p class="sub">Découvrez les aides auxquelles vous avez droit pour votre projet immobilier.</p>
+    <p class="sub">Les aides auxquelles votre foyer a droit pour acheter un appartement, et le prix maximal que vous pouvez financer.</p>
     <p class="lien"><a href="{{ url_for('index') }}">← Retour au comparateur</a></p>
   </header>
 
@@ -65,7 +65,37 @@
         </label>
       </div>
 
-      <button id="tester">Tester mon éligibilité</button>
+      <h2>Revenus et crédit</h2>
+      <div class="f">
+        <label for="revenus">Revenus nets mensuels du foyer avant impôt (€)</label>
+        <input type="number" id="revenus" min="0" max="100000" step="100" value="5000">
+      </div>
+      <div class="f">
+        <label for="charges">Mensualités de crédits en cours (€)</label>
+        <input type="number" id="charges" min="0" max="50000" step="10" value="0">
+      </div>
+      <div class="f">
+        <label for="taux">Taux du prêt principal (%)</label>
+        <input type="number" id="taux" min="0" max="10" step="0.05" value="3.5">
+      </div>
+      <div class="f">
+        <label for="duree">Durée (ans)</label>
+        <input type="number" id="duree" min="5" max="30" step="1" value="25">
+      </div>
+      <div class="f">
+        <label for="ass">Assurance emprunteur (%/an du capital)</label>
+        <input type="number" id="ass" min="0" max="2" step="0.01" value="0.30">
+      </div>
+      <div class="f">
+        <label for="garantie">Garantie (% du prêt)</label>
+        <input type="number" id="garantie" min="0" max="3" step="0.05" value="1.0">
+      </div>
+      <div class="f">
+        <label for="frais_dossier">Frais de dossier (€)</label>
+        <input type="number" id="frais_dossier" min="0" max="5000" step="50" value="1000">
+      </div>
+
+      <button id="tester">Calculer</button>
     </aside>
 
     <section class="results">
@@ -89,7 +119,16 @@ async function testerEligibilite() {
     prix: parseFloat($('prix').value) || 0,
     salarie: $('salarie').checked,
     apport: parseFloat($('apport').value) || 0,
+    revenus: parseFloat($('revenus').value) || 0,
+    charges: parseFloat($('charges').value) || 0,
+    taux: parseFloat($('taux').value) || 0,
+    duree: parseFloat($('duree').value) || 25,
+    ass: parseFloat($('ass').value) || 0,
+    garantie: parseFloat($('garantie').value) || 0,
+    frais_dossier: parseFloat($('frais_dossier').value) || 0,
+    etat: $('type_logement').value === 'ancien' ? 'ancien' : 'neuf',
   };
+  params.prix_vise = params.prix;
 
   $('loading').style.display = 'block';
   $('resultats').innerHTML = '';
@@ -102,7 +141,11 @@ async function testerEligibilite() {
     });
     const data = await response.json();
     if (!response.ok || data.success === false) throw new Error(data.error || "service indisponible");
+    const rc = await fetch('/api/capacite', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(params)});
+    const cap = await rc.json();
+    if (!rc.ok || cap.success === false) throw new Error(cap.error || "service indisponible");
     afficherResultats(data);
+    $('resultats').insertAdjacentHTML('afterbegin', afficherCapacite(cap));
   } catch (error) {
     $('resultats').innerHTML = `<p class="warn">Calcul impossible : ${error.message}. Vérifiez les champs puis réessayez.</p>`;
   } finally {
@@ -110,8 +153,26 @@ async function testerEligibilite() {
   }
 }
 
+const eur = x => Math.round(x).toLocaleString('fr-FR') + ' €';
+const pct = x => x.toLocaleString('fr-FR', {maximumFractionDigits: 1}) + ' %';
+function afficherCapacite(c) {
+  let h = `<h2>Capacité d'emprunt</h2><div class="card ${c.prix_max > 0 ? 'ok' : 'ko'}">
+    <h3>Prix maximal du logement : ${eur(c.prix_max)}</h3>
+    <p>Mensualité maximale : <strong>${eur(c.budget_mensuel)}</strong> (${pct(c.taux_effort_max)} de ${eur(c.revenus)} − ${eur(c.charges)} de crédits en cours)<br>
+    Financement : prêt principal <strong>${eur(c.pret_principal)}</strong> + PTZ ${eur(c.ptz)}${c.ptz ? ` (${c.ptz_duree} ans dont ${c.ptz_differe} de différé)` : ''} + Action Logement ${eur(c.al)} + apport ${eur(c.apport)}<br>
+    Frais inclus : ${eur(c.frais_total)} (notaire ${eur(c.frais_notaire)}, garantie ${eur(c.frais_garantie)}, dossier ${eur(c.frais_dossier)})<br>
+    Mensualité totale ${eur(c.mensualite)} · taux d'effort ${pct(c.taux_effort)} · reste à vivre <strong>${eur(c.reste_a_vivre)}</strong>/mois</p>`;
+  if (c.projet) {
+    const p = c.projet;
+    h += `<p class="${p.financable ? 'ok' : 'warn'}">Votre projet à ${eur(p.prix)} : mensualité ${eur(p.mensualite)}, taux d'effort ${p.taux_effort === null ? '–' : pct(p.taux_effort)} → ${p.financable ? 'finançable' : 'au-delà de 35 %, refus probable'}.</p>`;
+  }
+  h += c.alertes.map(a => `<p class="warn">${a}</p>`).join('');
+  h += `<small class="note">${c.source}. Cumul des mensualités sans lissage, assurance sur le capital initial. Les banques peuvent déroger pour 20 % de leurs dossiers.</small></div>`;
+  return h;
+}
+
 function afficherResultats(aides) {
-  let html = '<h2>Résultats</h2>';
+  let html = '<h2>Aides</h2>';
 
   for (const [nom, aide] of Object.entries(aides)) {
     if (aide.eligible) {

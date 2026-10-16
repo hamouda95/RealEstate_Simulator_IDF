@@ -873,6 +873,105 @@ def synthese(p):
     )
 
 
+# ---------------------------------------------------------------- capacité d'emprunt
+# Décision HCSF n° D-HCSF-2021-7 (contraignante depuis le 1er janvier 2022) : taux d'effort
+# ≤ 35 % des revenus nets avant impôt, assurance comprise ; durée ≤ 25 ans, 27 ans pour le neuf
+# ou la VEFA (différé d'amortissement de 2 ans maximum pendant la construction).
+SOURCE_HCSF = "Décision HCSF n° D-HCSF-2021-7 : taux d'effort ≤ 35 % assurance comprise, durée ≤ 25 ans (27 ans dans le neuf)"
+TAUX_EFFORT_MAX = 0.35
+
+
+def mensualites_aides(ptz, al, p):
+    """Mensualité maximale (cumul sans lissage) due au PTZ et au prêt Action Logement, assurance incluse."""
+    ia = p["ass"] / 1200
+    m_ptz = ptz / max(1, (p["ptz_dur"] - p["ptz_dif"]) * 12) if ptz > 0 else 0.0
+    m_al = pmt(al, p["taux_al"] / 1200, p["duree_al"] * 12)
+    return m_ptz + m_al + (ptz + al) * ia
+
+
+def capacite_emprunt(params):
+    """Capacité d'emprunt du foyer : capital maximal du prêt principal tel que la somme des
+    mensualités (tous prêts, assurance comprise) et des crédits en cours ≤ 35 % des revenus nets,
+    puis prix maximal du logement tel que prix + frais = apport + prêts."""
+    revenus = max(0.0, nombre(params.get("revenus"), 0))
+    charges = max(0.0, nombre(params.get("charges"), 0))
+    apport = max(0.0, nombre(params.get("apport"), 0))
+    taux = min(max(0.0, nombre(params.get("taux"), 3.5)), 20.0)
+    ass = min(max(0.0, nombre(params.get("ass"), 0.30)), 5.0)
+    duree = int(min(max(nombre(params.get("duree"), 25), 5), 30))
+    etat = params.get("etat") if params.get("etat") in TAUX_DROITS else "neuf"
+    type_logement = "vefa" if etat == "neuf" else "ancien"
+    zone = params.get("zone") if params.get("zone") in ZONES_PTZ else "B1"
+    rfr = max(0.0, nombre(params.get("revenu_fiscal"), 0))
+    nb = min(20, max(1, int(nombre(params.get("nb_personnes"), 1))))
+    salarie = bool(params.get("salarie", False))
+    p = dict(prix=0.0, apport=apport, etat=etat, al=0.0, ass=ass, taux_al=1.0, duree_al=min(25, duree),
+             ptz_dur=0, ptz_dif=0, frais_dossier=max(0.0, nombre(params.get("frais_dossier"), 1000)),
+             garantie=min(max(0.0, nombre(params.get("garantie"), 1.0)), 50.0), courtage=0.0)
+
+    budget = revenus * TAUX_EFFORT_MAX - charges
+    duree_max = 27 if etat == "neuf" else 25
+    alertes = []
+    if revenus <= 0:
+        alertes.append("Indiquez les revenus nets mensuels du foyer (avant impôt).")
+    if duree > duree_max:
+        alertes.append(f"Durée de {duree} ans supérieure au maximum HCSF de {duree_max} ans.")
+    r, ia, n = taux / 1200, ass / 1200, duree * 12
+    facteur = pmt(1.0, r, n) + ia  # mensualité (assurance incluse) pour 1 € de prêt principal
+    al_ok = salarie and verifier_eligibilite_al(rfr, zone, nb, salarie)[0]
+
+    def plan(prix):
+        """Financement d'un logement de prix « prix » : aides auxquelles le foyer a droit + prêt principal."""
+        q = dict(p, prix=prix)
+        ptz_info = calculer_ptz(prix, type_logement, zone, rfr, nb, apport)
+        ptz = float(ptz_info.get("montant_max", 0)) if ptz_info["eligible"] else 0.0
+        if ptz:
+            q["ptz_dur"], q["ptz_dif"] = ptz_info["duree_max"], ptz_info["differe"]
+        al = float(min(30000, prix)) if al_ok else 0.0
+        q["al"] = al
+        fi = frais_initiaux(q)
+        besoin = max(prix + fi["total"] - apport - ptz - al, 0.0)
+        mensualite = besoin * facteur + mensualites_aides(ptz, al, q)
+        return dict(prix=prix, ptz=ptz, al=al, principal=besoin, frais=fi, mensualite=mensualite,
+                    ptz_dur=q["ptz_dur"], ptz_dif=q["ptz_dif"])
+
+    if budget <= 0:
+        prix_max, best = 0.0, plan(0.0)
+        if revenus > 0:
+            alertes.append("Les crédits en cours atteignent déjà 35 % des revenus : aucune capacité d'emprunt.")
+    else:
+        # La mensualité nécessaire croît avec le prix : recherche dichotomique du prix maximal finançable.
+        bas, haut = 0.0, 1.0
+        while plan(haut)["mensualite"] <= budget and haut < 1e8:
+            bas, haut = haut, haut * 2
+        for _ in range(60):
+            mil = (bas + haut) / 2
+            if plan(mil)["mensualite"] <= budget:
+                bas = mil
+            else:
+                haut = mil
+        prix_max = math.floor(bas)
+        best = plan(prix_max)
+    res = dict(
+        revenus=revenus, charges=charges, budget_mensuel=max(budget, 0.0), taux_effort_max=TAUX_EFFORT_MAX * 100,
+        duree_max=duree_max, prix_max=prix_max, pret_principal=best["principal"], ptz=best["ptz"], al=best["al"],
+        ptz_duree=best["ptz_dur"], ptz_differe=best["ptz_dif"],
+        total_emprunte=best["principal"] + best["ptz"] + best["al"], apport=apport,
+        frais_notaire=best["frais"]["notaire"], frais_garantie=best["frais"]["garantie"],
+        frais_dossier=best["frais"]["dossier"], frais_total=best["frais"]["total"],
+        mensualite=best["mensualite"], taux_effort=(best["mensualite"] + charges) / revenus * 100 if revenus else 0.0,
+        reste_a_vivre=revenus - charges - best["mensualite"], nb_personnes=nb,
+        source=SOURCE_HCSF, alertes=alertes)
+    prix_vise = max(0.0, nombre(params.get("prix_vise"), 0))
+    if prix_vise > 0:
+        v = plan(prix_vise)
+        res["projet"] = dict(prix=prix_vise, pret_principal=v["principal"], ptz=v["ptz"], al=v["al"],
+                             frais_total=v["frais"]["total"], mensualite=v["mensualite"],
+                             taux_effort=(v["mensualite"] + charges) / revenus * 100 if revenus else None,
+                             financable=revenus > 0 and v["mensualite"] + charges <= revenus * TAUX_EFFORT_MAX + 0.005)
+    return res
+
+
 # ---------------------------------------------------------------- routes
 def corps_json():
     corps = request.get_json(silent=True)
@@ -913,6 +1012,12 @@ def api_eligibilite():
     """API pour tester l'éligibilité aux aides."""
     params = corps_json()
     return jsonify(eligibilite_aides(params))
+
+
+@app.post("/api/capacite")
+def api_capacite():
+    """Capacité d'emprunt du foyer selon les règles du HCSF, aides comprises."""
+    return jsonify(capacite_emprunt(corps_json()))
 
 
 @app.post("/api/comparer")

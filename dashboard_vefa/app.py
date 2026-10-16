@@ -358,6 +358,7 @@ def geocoder_adresse(adresse):
 
 OVERPASS_URLS = [
     "https://overpass-api.de/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 ]
 
@@ -390,17 +391,17 @@ def rechercher_poi(lat, lon, rayon=500):
         headers = {
             "User-Agent": "VEFA-Dashboard/1.0 (immobilier-simulation)"
         }
-        erreur = None
-        for url in OVERPASS_URLS:  # le serveur principal est souvent saturé
+        erreurs = []
+        for url in OVERPASS_URLS:  # les serveurs publics sont souvent saturés
             try:
-                response = requests.post(url, data={"data": overpass_query}, headers=headers, timeout=30)
+                response = requests.post(url, data={"data": overpass_query}, headers=headers, timeout=(5, 30))
                 response.raise_for_status()
                 data = response.json()
                 break
             except (requests.RequestException, ValueError) as e:
-                erreur = e
+                erreurs.append(f"{url.split('/')[2]}: {e.__class__.__name__}")
         else:
-            raise erreur
+            return {"success": False, "error": "Serveurs Overpass indisponibles, réessayez dans quelques minutes (" + "; ".join(erreurs) + ")"}
 
         poi = []
         for element in data.get("elements", []):
